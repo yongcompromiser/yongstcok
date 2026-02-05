@@ -1,20 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Star, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-
-// 임시 데이터 (나중에 실제 데이터로 교체)
-const watchlistData = [
-  { symbol: '005930', name: '삼성전자', price: 71500, change: 1.2 },
-  { symbol: '000660', name: 'SK하이닉스', price: 178000, change: -0.8 },
-  { symbol: '035720', name: '카카오', price: 42500, change: 2.5 },
-  { symbol: '035420', name: 'NAVER', price: 185000, change: 0 },
-  { symbol: '051910', name: 'LG화학', price: 385000, change: -1.5 },
-];
+import { Skeleton } from '@/components/ui/skeleton';
+import { useMarketData } from '@/hooks/useStock';
 
 function PriceChange({ change }: { change: number }) {
   if (change > 0) {
@@ -39,87 +31,115 @@ function PriceChange({ change }: { change: number }) {
   );
 }
 
+function IndexBadge({ value }: { value: number }) {
+  const isPositive = value > 0;
+  const isZero = value === 0;
+  return (
+    <Badge
+      variant="outline"
+      className={`ml-2 ${
+        isZero
+          ? ''
+          : isPositive
+          ? 'text-red-500 border-red-500'
+          : 'text-blue-500 border-blue-500'
+      }`}
+    >
+      {isPositive ? '+' : ''}{value.toFixed(2)}%
+    </Badge>
+  );
+}
+
 export function RightPanel() {
+  const { data: marketData, isLoading } = useMarketData();
+
   return (
     <aside className="hidden xl:flex w-72 flex-col border-l bg-background">
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
-          {/* 관심기업 퀵뷰 */}
+          {/* 거래량 상위 종목 */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Star className="h-4 w-4 text-yellow-500" />
-                관심기업
+                <TrendingUp className="h-4 w-4 text-red-500" />
+                상승 TOP
+                {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {watchlistData.map((stock) => (
-                <Link
-                  key={stock.symbol}
-                  href={`/company/${stock.symbol}`}
-                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors"
-                >
-                  <div>
-                    <p className="font-medium text-sm">{stock.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {stock.symbol}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium text-sm">
-                      {stock.price.toLocaleString()}원
-                    </p>
-                    <PriceChange change={stock.change} />
-                  </div>
-                </Link>
-              ))}
-              {watchlistData.length === 0 && (
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-12" />
+                ))
+              ) : marketData?.topRise?.length > 0 ? (
+                marketData.topRise.slice(0, 5).map((stock: any) => (
+                  <Link
+                    key={stock.symbol}
+                    href={`/company/${stock.symbol}`}
+                    className="flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">{stock.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {stock.symbol}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-sm">
+                        {stock.price.toLocaleString()}원
+                      </p>
+                      <PriceChange change={stock.changePercent} />
+                    </div>
+                  </Link>
+                ))
+              ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  관심기업이 없습니다
+                  데이터를 불러올 수 없습니다
                 </p>
               )}
             </CardContent>
           </Card>
 
-          {/* 시장 요약 */}
+          {/* 시장 현황 */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">시장 현황</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                시장 현황
+                {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm">코스피</span>
-                <div className="text-right">
-                  <span className="font-medium">2,645.23</span>
-                  <Badge
-                    variant="outline"
-                    className="ml-2 text-red-500 border-red-500"
-                  >
-                    +0.85%
-                  </Badge>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">코스닥</span>
-                <div className="text-right">
-                  <span className="font-medium">823.45</span>
-                  <Badge
-                    variant="outline"
-                    className="ml-2 text-blue-500 border-blue-500"
-                  >
-                    -0.32%
-                  </Badge>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">원/달러</span>
-                <div className="text-right">
-                  <span className="font-medium">1,325.50</span>
-                  <Badge variant="outline" className="ml-2">
-                    0.00%
-                  </Badge>
-                </div>
-              </div>
+              {isLoading ? (
+                <>
+                  <Skeleton className="h-6" />
+                  <Skeleton className="h-6" />
+                </>
+              ) : marketData?.index ? (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">코스피</span>
+                    <div className="text-right">
+                      <span className="font-medium">
+                        {marketData.index.kospi.value.toLocaleString()}
+                      </span>
+                      <IndexBadge value={marketData.index.kospi.changePercent} />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">코스닥</span>
+                    <div className="text-right">
+                      <span className="font-medium">
+                        {marketData.index.kosdaq.value.toLocaleString()}
+                      </span>
+                      <IndexBadge value={marketData.index.kosdaq.changePercent} />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center">
+                  데이터를 불러올 수 없습니다
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
