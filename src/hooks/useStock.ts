@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stock, StockPrice, CandleData } from '@/types/stock';
 
@@ -18,18 +19,25 @@ export function useStockPrice(symbol: string | null) {
   });
 }
 
-// 종목 검색
+// 종목 검색 (300ms 디바운스)
 export function useStockSearch(query: string) {
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   return useQuery({
-    queryKey: ['stockSearch', query],
+    queryKey: ['stockSearch', debouncedQuery],
     queryFn: async (): Promise<Stock[]> => {
-      if (!query || query.length < 1) return [];
-      const res = await fetch(`/api/stock?q=${encodeURIComponent(query)}`);
+      if (!debouncedQuery || debouncedQuery.length < 1) return [];
+      const res = await fetch(`/api/stock?q=${encodeURIComponent(debouncedQuery)}`);
       if (!res.ok) return [];
       const data = await res.json();
       return data.results || [];
     },
-    enabled: query.length >= 1,
+    enabled: debouncedQuery.length >= 1,
   });
 }
 

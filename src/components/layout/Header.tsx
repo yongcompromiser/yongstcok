@@ -1,17 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import {
   Search,
   Sun,
   Moon,
-  User,
   LogOut,
   Settings,
   Star,
   Briefcase,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,44 +25,111 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { useStockStore } from '@/stores/useStockStore';
+import { useStockSearch } from '@/hooks/useStock';
 
 export function Header() {
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, isAdmin } = useAuthStore();
-  const { searchQuery, setSearchQuery } = useStockStore();
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [query, setQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    // TODO: 검색 실행
-    console.log('Search:', searchQuery);
+  const { data: searchResults, isLoading: isSearching } = useStockSearch(query);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // 검색어 변경 시 드롭다운 열기
+  useEffect(() => {
+    if (query.length >= 1) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  }, [query]);
+
+  const handleSelect = (symbol: string) => {
+    setQuery('');
+    setIsOpen(false);
+    router.push(`/company/${symbol}`);
   };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4 gap-4">
         {/* 로고 */}
-        <Link href="/" className="flex items-center gap-2 font-bold text-lg">
+        <Link href="/" className="flex items-center gap-2 font-bold text-lg shrink-0">
           <span className="text-primary">주뇽좌의</span>
           <span>주식생활</span>
         </Link>
 
         {/* 검색창 */}
-        <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-4">
+        <div ref={searchRef} className="relative flex-1 max-w-xl mx-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            {isSearching ? (
+              <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            )}
             <Input
               type="text"
               placeholder="종목명 또는 종목코드 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => query.length >= 1 && setIsOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsOpen(false);
+                  setQuery('');
+                }
+              }}
               className="pl-10 w-full"
             />
           </div>
-        </form>
+
+          {/* 검색 결과 드롭다운 */}
+          {isOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50 max-h-80 overflow-auto">
+              {isSearching ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                  검색 중...
+                </div>
+              ) : searchResults && searchResults.length > 0 ? (
+                searchResults.map((stock) => (
+                  <button
+                    key={stock.symbol}
+                    onClick={() => handleSelect(stock.symbol)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted transition-colors text-left"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">{stock.name}</p>
+                      <p className="text-xs text-muted-foreground">{stock.symbol}</p>
+                    </div>
+                    {stock.market && (
+                      <span className="text-xs text-muted-foreground">
+                        {stock.market === 'KR' ? 'KRX' : stock.market}
+                      </span>
+                    )}
+                  </button>
+                ))
+              ) : query.length >= 1 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  검색 결과가 없습니다
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
 
         {/* 네비게이션 */}
         <nav className="hidden md:flex items-center gap-1">
