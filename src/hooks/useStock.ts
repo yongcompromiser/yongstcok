@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stock, StockPrice, CandleData } from '@/types/stock';
+import { searchLocalStocks } from '@/lib/stockList';
 
 // 개별 종목 시세 조회
 export function useStockPrice(symbol: string | null) {
@@ -19,26 +20,30 @@ export function useStockPrice(symbol: string | null) {
   });
 }
 
-// 종목 검색 (300ms 디바운스)
+// 종목 검색 (로컬 데이터 기반 즉시 검색)
 export function useStockSearch(query: string) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 300);
+    const timer = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(timer);
   }, [query]);
 
-  return useQuery({
-    queryKey: ['stockSearch', debouncedQuery],
-    queryFn: async (): Promise<Stock[]> => {
-      if (!debouncedQuery || debouncedQuery.length < 1) return [];
-      const res = await fetch(`/api/stock?q=${encodeURIComponent(debouncedQuery)}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.results || [];
-    },
-    enabled: debouncedQuery.length >= 1,
-  });
+  const results = useMemo(() => {
+    if (!debouncedQuery || debouncedQuery.length < 1) return [];
+    const localResults = searchLocalStocks(debouncedQuery);
+    return localResults.map((item) => ({
+      symbol: item.symbol,
+      name: item.name,
+      market: item.market as string,
+    }));
+  }, [debouncedQuery]);
+
+  return {
+    data: results as (Stock & { market: string })[],
+    isLoading: false,
+    isError: false,
+  };
 }
 
 // 차트 데이터

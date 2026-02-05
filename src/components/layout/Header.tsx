@@ -117,7 +117,7 @@ export function Header() {
                     </div>
                     {stock.market && (
                       <span className="text-xs text-muted-foreground">
-                        {stock.market === 'KR' ? 'KRX' : stock.market}
+                        {stock.market}
                       </span>
                     )}
                   </button>
