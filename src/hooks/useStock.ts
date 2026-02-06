@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Stock, StockPrice, CandleData } from '@/types/stock';
+import { Stock, StockPrice, CandleData, CompanyDetail } from '@/types/stock';
 import { searchLocalStocks } from '@/lib/stockList';
 
 // 개별 종목 시세 조회
@@ -105,5 +105,20 @@ export function useFinancials(symbol: string | null, year?: string) {
       return data.financial || null;
     },
     enabled: !!symbol,
+  });
+}
+
+// 기업 상세 통합 데이터 (기업정보 + 다년재무 + 주주 + 배당)
+export function useCompanyDetail(symbol: string | null) {
+  return useQuery<CompanyDetail | null>({
+    queryKey: ['companyDetail', symbol],
+    queryFn: async () => {
+      if (!symbol) return null;
+      const res = await fetch(`/api/dart/company?symbol=${symbol}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!symbol,
+    staleTime: 5 * 60 * 1000, // 5분
   });
 }

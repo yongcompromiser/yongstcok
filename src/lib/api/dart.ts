@@ -1,7 +1,7 @@
 // DART OpenAPI (금융감독원 전자공시시스템)
 // https://opendart.fss.or.kr
 
-import { FinancialData, Disclosure } from '@/types/stock';
+import { FinancialData, Disclosure, Shareholder, DividendData, MultiYearFinancials } from '@/types/stock';
 
 const DART_API = 'https://opendart.fss.or.kr/api';
 
@@ -178,6 +178,188 @@ export async function getDividendInfo(corpCode: string, year: string) {
     console.error('getDividendInfo error:', error);
     return null;
   }
+}
+
+// 최근 N년 연간 + 최근 4분기 재무제표 통합 조회
+export async function getMultiYearFinancials(
+  corpCode: string,
+  years: number = 5
+): Promise<MultiYearFinancials> {
+  const currentYear = new Date().getFullYear();
+  const result: MultiYearFinancials = { annual: [], quarterly: [] };
+
+  // 연간 재무제표 (최근 N년)
+  const annualPromises = Array.from({ length: years }, (_, i) => {
+    const year = (currentYear - 1 - i).toString();
+    return getFinancials(corpCode, year, '11011').then(f => {
+      if (f) f.symbol = corpCode;
+      return f;
+    });
+  });
+
+  // 최근 4분기 재무제표
+  const quarterReports: Array<{ year: string; code: '11013' | '11012' | '11014' | '11011' }> = [
+    { year: (currentYear - 1).toString(), code: '11014' }, // 전년 3분기
+    { year: (currentYear - 1).toString(), code: '11012' }, // 전년 반기
+    { year: (currentYear - 1).toString(), code: '11013' }, // 전년 1분기
+    { year: currentYear.toString(), code: '11013' },       // 올해 1분기
+  ];
+
+  const quarterPromises = quarterReports.map(({ year, code }) =>
+    getFinancials(corpCode, year, code).then(f => {
+      if (f) f.symbol = corpCode;
+      return f;
+    })
+  );
+
+  const [annualResults, quarterResults] = await Promise.all([
+    Promise.all(annualPromises),
+    Promise.all(quarterPromises),
+  ]);
+
+  result.annual = annualResults.filter((f): f is FinancialData => f !== null);
+  result.quarterly = quarterResults.filter((f): f is FinancialData => f !== null);
+
+  // 기간순 정렬
+  result.annual.sort((a, b) => a.period.localeCompare(b.period));
+  result.quarterly.sort((a, b) => a.period.localeCompare(b.period));
+
+  return result;
+}
+
+// 최대주주 현황
+export async function getMajorShareholders(
+  corpCode: string,
+  year?: string
+): Promise<Shareholder[]> {
+  try {
+    const y = year || (new Date().getFullYear() - 1).toString();
+    const res = await fetch(
+      `${DART_API}/hyslrSttus.json?crtfc_key=${getDartKey()}&corp_code=${corpCode}&bsns_year=${y}&reprt_code=11011`,
+      { next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.status !== '000' || !data.list) return [];
+
+    return data.list
+      .filter((item: any) => item.nm && item.nm !== '-')
+      .map((item: any) => ({
+        name: item.nm || '',
+        relation: item.relate || '',
+        shares: Number(String(item.bsis_posesn_stock_co || '0').replace(/,/g, '')) || 0,
+        sharePercent: parseFloat(item.bsis_posesn_stock_qota_rt || '0') || 0,
+      }));
+  } catch (error) {
+    console.error('getMajorShareholders error:', error);
+    return [];
+  }
+}
+
+// 주식총수 현황
+export async function getTotalShares(
+  corpCode: string,
+  year?: string
+): Promise<{ commonShares: number; preferredShares: number; treasuryShares: number } | null> {
+  try {
+    const y = year || (new Date().getFullYear() - 1).toString();
+    const res = await fetch(
+      `${DART_API}/stockTotqySttus.json?crtfc_key=${getDartKey()}&corp_code=${corpCode}&bsns_year=${y}&reprt_code=11011`,
+      { next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== '000' || !data.list) return null;
+
+    let commonShares = 0;
+    let preferredShares = 0;
+
+    for (const item of data.list) {
+      const shares = Number(String(item.istc_totqy || '0').replace(/,/g, '')) || 0;
+      if (item.se === '보통주') commonShares = shares;
+      else if (item.se === '우선주') preferredShares = shares;
+    }
+
+    return { commonShares, preferredShares, treasuryShares: 0 };
+  } catch (error) {
+    console.error('getTotalShares error:', error);
+    return null;
+  }
+}
+
+// 자기주식 취득/처분 현황
+export async function getTreasuryStock(
+  corpCode: string,
+  year?: string
+): Promise<number> {
+  try {
+    const y = year || (new Date().getFullYear() - 1).toString();
+    const res = await fetch(
+      `${DART_API}/tesstkAcqsDspsSttus.json?crtfc_key=${getDartKey()}&corp_code=${corpCode}&bsns_year=${y}&reprt_code=11011`,
+      { next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return 0;
+    const data = await res.json();
+    if (data.status !== '000' || !data.list) return 0;
+
+    let totalTreasury = 0;
+    for (const item of data.list) {
+      if (item.stock_knd === '보통주') {
+        totalTreasury += Number(String(item.trmend_rmndr_co || '0').replace(/,/g, '')) || 0;
+      }
+    }
+    return totalTreasury;
+  } catch (error) {
+    console.error('getTreasuryStock error:', error);
+    return 0;
+  }
+}
+
+// 다년도 배당이력
+export async function getDividendHistory(
+  corpCode: string,
+  years: number = 5
+): Promise<DividendData[]> {
+  const currentYear = new Date().getFullYear();
+  const results: DividendData[] = [];
+
+  const promises = Array.from({ length: years }, (_, i) => {
+    const year = (currentYear - 1 - i).toString();
+    return getDividendInfo(corpCode, year).then(data => ({ year, data }));
+  });
+
+  const allResults = await Promise.all(promises);
+
+  for (const { year, data } of allResults) {
+    if (!data || !Array.isArray(data)) continue;
+
+    let dividendPerShare = 0;
+    let dividendYield = 0;
+    let totalDividend = 0;
+    let payoutRatio = 0;
+
+    for (const item of data) {
+      const accountName = item.se || '';
+      const value = String(item.thstrm || '0').replace(/,/g, '');
+
+      if (accountName.includes('주당 현금배당금') && accountName.includes('보통주')) {
+        dividendPerShare = Number(value) || 0;
+      } else if (accountName.includes('현금배당수익률') && accountName.includes('보통주')) {
+        dividendYield = parseFloat(value) || 0;
+      } else if (accountName.includes('현금배당금총액')) {
+        totalDividend = Number(value) || 0;
+      } else if (accountName.includes('현금배당성향')) {
+        payoutRatio = parseFloat(value) || 0;
+      }
+    }
+
+    if (dividendPerShare > 0 || totalDividend > 0) {
+      results.push({ year, dividendPerShare, dividendYield, totalDividend, payoutRatio });
+    }
+  }
+
+  results.sort((a, b) => a.year.localeCompare(b.year));
+  return results;
 }
 
 function formatDate(date: Date): string {

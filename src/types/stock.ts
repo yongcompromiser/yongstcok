@@ -114,6 +114,56 @@ export interface StockMemo {
   updatedAt: Date;
 }
 
+// DART 기업정보
+export interface CompanyInfo {
+  corpCode: string;         // DART 고유번호
+  corpName: string;         // 회사명
+  stockCode: string;        // 종목코드
+  ceoName: string;          // 대표자
+  corpClass: string;        // Y: 유가증권, K: 코스닥
+  address: string;          // 주소
+  homepage: string;         // 홈페이지
+  establishDate: string;    // 설립일 (YYYYMMDD)
+  accountMonth: string;     // 결산월
+  sector?: string;          // 업종
+}
+
+// 최대주주 정보
+export interface Shareholder {
+  name: string;             // 주주명
+  relation: string;         // 관계 (본인, 특수관계인 등)
+  shares: number;           // 보유주식수
+  sharePercent: number;     // 지분율 (%)
+}
+
+// 배당 정보
+export interface DividendData {
+  year: string;             // 사업연도
+  dividendPerShare: number; // 주당배당금 (원)
+  dividendYield: number;    // 배당수익률 (%)
+  totalDividend: number;    // 배당금총액 (원)
+  payoutRatio: number;      // 배당성향 (%)
+}
+
+// 다년도 재무 통합 데이터
+export interface MultiYearFinancials {
+  annual: FinancialData[];  // 최근 5년 연간
+  quarterly: FinancialData[]; // 최근 4분기
+}
+
+// 기업 상세 통합 데이터
+export interface CompanyDetail {
+  info: CompanyInfo | null;
+  financials: MultiYearFinancials | null;
+  shareholders: Shareholder[];
+  dividends: DividendData[];
+  totalShares: {
+    commonShares: number;   // 보통주
+    preferredShares: number; // 우선주
+    treasuryShares: number; // 자기주식
+  } | null;
+}
+
 // 사용자
 export interface User {
   id: string;

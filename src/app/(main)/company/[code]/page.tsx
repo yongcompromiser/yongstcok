@@ -1,7 +1,6 @@
 'use client';
 
-import { use } from 'react';
-import { useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp,
@@ -9,20 +8,31 @@ import {
   Star,
   StarOff,
   Building2,
-  Calendar,
-  DollarSign,
+  Briefcase,
   BarChart3,
-  FileText,
-  StickyNote,
-  Loader2,
-  ExternalLink,
+  Activity,
+  TrendingUp as TrendingUpIcon,
+  Gift,
+  PieChart,
+  Users,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useStockPrice, useDisclosures } from '@/hooks/useStock';
+import { useStockPrice, useCompanyDetail } from '@/hooks/useStock';
+import { formatKRW, formatNumber } from '@/lib/utils';
+
+import StockChart from '@/components/company/StockChart';
+import SummaryTab from '@/components/company/tabs/SummaryTab';
+import BusinessInfoTab from '@/components/company/tabs/BusinessInfoTab';
+import FinancialsTab from '@/components/company/tabs/FinancialsTab';
+import FundamentalsTab from '@/components/company/tabs/FundamentalsTab';
+import ValuationTab from '@/components/company/tabs/ValuationTab';
+import ShareholderReturnTab from '@/components/company/tabs/ShareholderReturnTab';
+import StockInfoTab from '@/components/company/tabs/StockInfoTab';
+import ConsensusTab from '@/components/company/tabs/ConsensusTab';
 
 export default function CompanyPage({
   params,
@@ -33,14 +43,16 @@ export default function CompanyPage({
   const [isWatchlisted, setIsWatchlisted] = useState(false);
 
   const { data, isLoading, error } = useStockPrice(code);
+  const { data: companyDetail, isLoading: detailLoading } = useCompanyDetail(code);
 
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-8 w-72" />
-        <div className="grid gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton className="h-[400px]" />
+        <div className="grid gap-4 md:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-20" />
           ))}
         </div>
@@ -69,7 +81,7 @@ export default function CompanyPage({
 
   return (
     <div className="p-6 space-y-6">
-      {/* 헤더 */}
+      {/* 헤더: 종목명 + 코드 + 현재가 + 등락 */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -119,162 +131,134 @@ export default function CompanyPage({
         </Button>
       </div>
 
-      {/* 시세 요약 */}
-      <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-6">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">시가</div>
-            <div className="text-lg font-bold">
-              {price.open.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">고가</div>
-            <div className="text-lg font-bold text-red-500">
-              {price.high.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">저가</div>
-            <div className="text-lg font-bold text-blue-500">
-              {price.low.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">전일종가</div>
-            <div className="text-lg font-bold">
-              {price.prevClose.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">거래량</div>
-            <div className="text-lg font-bold">
-              {price.volume.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-        {(price.marketCap ?? 0) > 0 && (
-          <Card>
-            <CardContent className="pt-4">
-              <div className="text-sm text-muted-foreground">시가총액</div>
-              <div className="text-lg font-bold">
-                {(price.marketCap ?? 0) >= 10000_0000_0000
-                  ? `${((price.marketCap ?? 0) / 10000_0000_0000).toFixed(1)}조`
-                  : `${((price.marketCap ?? 0) / 1_0000_0000).toFixed(0)}억`}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      {/* 캔들스틱 차트 */}
+      <StockChart symbol={code} />
+
+      {/* 시세 요약 카드 */}
+      <div className="grid gap-3 grid-cols-3 md:grid-cols-6">
+        <PriceCard label="시가" value={formatNumber(price.open)} />
+        <PriceCard label="고가" value={formatNumber(price.high)} className="text-red-500" />
+        <PriceCard label="저가" value={formatNumber(price.low)} className="text-blue-500" />
+        <PriceCard label="전일종가" value={formatNumber(price.prevClose)} />
+        <PriceCard label="거래량" value={formatNumber(price.volume)} />
+        <PriceCard
+          label="시가총액"
+          value={(price.marketCap ?? 0) > 0 ? formatKRW(price.marketCap!) : '-'}
+        />
       </div>
 
-      {/* 탭 */}
+      {/* 8탭 구조 */}
       <Tabs defaultValue="summary">
-        <TabsList>
-          <TabsTrigger value="summary">
-            <Building2 className="h-4 w-4 mr-1" />
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="summary" className="text-xs sm:text-sm">
+            <Building2 className="h-4 w-4 mr-1 hidden sm:inline" />
             요약
           </TabsTrigger>
-          <TabsTrigger value="disclosure">
-            <FileText className="h-4 w-4 mr-1" />
-            공시
+          <TabsTrigger value="business" className="text-xs sm:text-sm">
+            <Briefcase className="h-4 w-4 mr-1 hidden sm:inline" />
+            사업정보
           </TabsTrigger>
-          <TabsTrigger value="memo">
-            <StickyNote className="h-4 w-4 mr-1" />
-            메모
+          <TabsTrigger value="financials" className="text-xs sm:text-sm">
+            <BarChart3 className="h-4 w-4 mr-1 hidden sm:inline" />
+            재무정보
+          </TabsTrigger>
+          <TabsTrigger value="fundamentals" className="text-xs sm:text-sm">
+            <Activity className="h-4 w-4 mr-1 hidden sm:inline" />
+            펀더멘탈
+          </TabsTrigger>
+          <TabsTrigger value="valuation" className="text-xs sm:text-sm">
+            <TrendingUpIcon className="h-4 w-4 mr-1 hidden sm:inline" />
+            벨류에이션
+          </TabsTrigger>
+          <TabsTrigger value="dividend" className="text-xs sm:text-sm">
+            <Gift className="h-4 w-4 mr-1 hidden sm:inline" />
+            주주환원
+          </TabsTrigger>
+          <TabsTrigger value="stockinfo" className="text-xs sm:text-sm">
+            <PieChart className="h-4 w-4 mr-1 hidden sm:inline" />
+            주식정보
+          </TabsTrigger>
+          <TabsTrigger value="consensus" className="text-xs sm:text-sm">
+            <Users className="h-4 w-4 mr-1 hidden sm:inline" />
+            컨센서스
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="summary" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">차트</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-48 flex items-center justify-center text-muted-foreground border rounded-md">
-                차트 영역 (TradingView 연동 예정)
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="summary" className="mt-4">
+          <SummaryTab
+            symbol={code}
+            companyDetail={companyDetail ?? null}
+            isLoading={detailLoading}
+          />
         </TabsContent>
 
-        <TabsContent value="disclosure">
-          <DisclosureTab symbol={code} />
+        <TabsContent value="business" className="mt-4">
+          <BusinessInfoTab
+            info={companyDetail?.info ?? null}
+            isLoading={detailLoading}
+          />
         </TabsContent>
 
-        <TabsContent value="memo">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">내 메모</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <StickyNote className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>로그인 후 메모를 작성할 수 있습니다</p>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="financials" className="mt-4">
+          <FinancialsTab
+            financials={companyDetail?.financials ?? null}
+            isLoading={detailLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="fundamentals" className="mt-4">
+          <FundamentalsTab
+            financials={companyDetail?.financials ?? null}
+            isLoading={detailLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="valuation" className="mt-4">
+          <ValuationTab
+            financials={companyDetail?.financials ?? null}
+            price={price}
+            isLoading={detailLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="dividend" className="mt-4">
+          <ShareholderReturnTab
+            dividends={companyDetail?.dividends ?? []}
+            isLoading={detailLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="stockinfo" className="mt-4">
+          <StockInfoTab
+            totalShares={companyDetail?.totalShares ?? null}
+            shareholders={companyDetail?.shareholders ?? []}
+            price={price}
+            isLoading={detailLoading}
+          />
+        </TabsContent>
+
+        <TabsContent value="consensus" className="mt-4">
+          <ConsensusTab />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function DisclosureTab({ symbol }: { symbol: string }) {
-  const { data: disclosures, isLoading } = useDisclosures(symbol);
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="pt-6 space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-16" />
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-
+function PriceCard({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">최근 공시</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {disclosures && disclosures.length > 0 ? (
-          <div className="space-y-3">
-            {disclosures.map((item: any) => (
-              <a
-                key={item.id}
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted transition-colors"
-              >
-                <div className="space-y-1">
-                  <p className="font-medium text-sm">{item.title}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{item.date}</span>
-                  </div>
-                </div>
-                <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-              </a>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            {process.env.NEXT_PUBLIC_DART_ENABLED === 'false'
-              ? 'DART API 키가 설정되지 않았습니다'
-              : '공시 정보가 없습니다'}
-          </p>
-        )}
+      <CardContent className="pt-4 pb-4">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className={`text-lg font-bold ${className || ''}`}>{value}</div>
       </CardContent>
     </Card>
   );
