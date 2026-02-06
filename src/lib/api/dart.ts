@@ -2,6 +2,7 @@
 // https://opendart.fss.or.kr
 
 import { FinancialData, Disclosure, Shareholder, DividendData, MultiYearFinancials } from '@/types/stock';
+import { getCorpCodeFromMap } from '@/lib/corpCodeMap';
 
 const DART_API = 'https://opendart.fss.or.kr/api';
 
@@ -15,24 +16,15 @@ function getDartKey(): string {
 
 // 기업 고유번호 조회 (종목코드 → DART 고유번호)
 export async function getCorpCode(symbol: string): Promise<string | null> {
-  // DART는 종목코드가 아닌 고유번호를 사용
-  // 실제로는 corpCode.xml에서 매핑 필요 → 캐시 테이블 활용
-  // 여기서는 API로 직접 검색
-  try {
-    const res = await fetch(
-      `${DART_API}/company.json?crtfc_key=${getDartKey()}&stock_code=${symbol}`,
-      { next: { revalidate: 86400 } } // 24시간 캐시
-    );
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    if (data.status !== '000') return null;
-
-    return data.corp_code || null;
-  } catch (error) {
-    console.error('getCorpCode error:', error);
-    return null;
+  // 먼저 로컬 매핑 테이블에서 조회
+  const mappedCode = getCorpCodeFromMap(symbol);
+  if (mappedCode) {
+    return mappedCode;
   }
+
+  // 매핑에 없으면 null 반환 (DART API는 stock_code 직접 조회 미지원)
+  console.log(`Corp code not found in map for symbol: ${symbol}`);
+  return null;
 }
 
 // 기업 기본 정보
