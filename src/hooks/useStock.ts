@@ -20,28 +20,81 @@ export function useStockPrice(symbol: string | null) {
   });
 }
 
-// 종목 검색 (로컬 데이터 기반 즉시 검색)
+// 종목 검색 (로컬 즉시 + 네이버 API 병합)
 export function useStockSearch(query: string) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [apiResults, setApiResults] = useState<(Stock & { market: string })[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const results = useMemo(() => {
+  // 로컬 검색 (즉시)
+  const localResults = useMemo(() => {
     if (!debouncedQuery || debouncedQuery.length < 1) return [];
-    const localResults = searchLocalStocks(debouncedQuery);
-    return localResults.map((item) => ({
+    return searchLocalStocks(debouncedQuery).map((item) => ({
       symbol: item.symbol,
       name: item.name,
       market: item.market as string,
     }));
   }, [debouncedQuery]);
 
+  // 네이버 API 검색 (비동기)
+  useEffect(() => {
+    if (!debouncedQuery || debouncedQuery.length < 1) {
+      setApiResults([]);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    fetch(`/api/stock?q=${encodeURIComponent(debouncedQuery)}`)
+      .then((res) => (res.ok ? res.json() : { results: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const results = (data.results || []).map((item: any) => ({
+          symbol: item.symbol || '',
+          name: item.name || '',
+          market: item.market || 'KR',
+        }));
+        setApiResults(results);
+      })
+      .catch(() => {
+        if (!cancelled) setApiResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [debouncedQuery]);
+
+  // 로컬 + API 결과 병합 (중복 제거)
+  const merged = useMemo(() => {
+    const seen = new Set<string>();
+    const combined: (Stock & { market: string })[] = [];
+
+    for (const item of localResults) {
+      if (!seen.has(item.symbol)) {
+        seen.add(item.symbol);
+        combined.push(item as Stock & { market: string });
+      }
+    }
+    for (const item of apiResults) {
+      if (!seen.has(item.symbol) && item.symbol) {
+        seen.add(item.symbol);
+        combined.push(item as Stock & { market: string });
+      }
+    }
+    return combined.slice(0, 15);
+  }, [localResults, apiResults]);
+
   return {
-    data: results as (Stock & { market: string })[],
-    isLoading: false,
+    data: merged,
+    isLoading: isLoading && localResults.length === 0,
     isError: false,
   };
 }
