@@ -55,43 +55,47 @@ export async function getStockInfo(symbol: string): Promise<Stock | null> {
   }
 }
 
-// 종목 검색 (네이버 자동완성)
+// 종목 검색 (로컬 + Yahoo Finance)
 export async function searchStocks(query: string): Promise<Stock[]> {
   try {
-    // 방법 1: 네이버 자동완성 API
-    const res = await fetch(
-      `${NAVER_AC}/ac?q=${encodeURIComponent(query)}&target=stock&st=111&r_lt=111&r_format=json`,
-      {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
+    // 로컬 검색
+    const { searchLocalStocks } = await import('@/lib/stockList');
+    const localResults = searchLocalStocks(query).map((item) => ({
+      symbol: item.symbol,
+      name: item.name,
+      market: 'KR' as const,
+    }));
+
+    // Yahoo Finance 검색 (보조)
+    try {
+      const res = await fetch(
+        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const yahooResults = (data.quotes || [])
+          .filter((q: any) => q.exchange === 'KSC' || q.exchange === 'KOE')
+          .map((q: any) => ({
+            symbol: (q.symbol || '').replace(/\.(KS|KQ)$/, ''),
+            name: q.shortname || q.longname || '',
+            market: 'KR' as const,
+          }));
+
+        // 병합 (로컬 우선, 중복 제거)
+        const seen = new Set(localResults.map((r) => r.symbol));
+        for (const yr of yahooResults) {
+          if (!seen.has(yr.symbol) && yr.symbol) {
+            seen.add(yr.symbol);
+            localResults.push(yr);
+          }
+        }
       }
-    );
-
-    if (res.ok) {
-      const data = await res.json();
-      const items = data?.items?.[0] || [];
-      return items.slice(0, 10).map((item: any[]) => ({
-        symbol: item[0]?.[0] || '',
-        name: item[1]?.[0] || '',
-        market: 'KR' as const,
-      }));
+    } catch {
+      // Yahoo 실패해도 로컬 결과 반환
     }
 
-    // 방법 2: 네이버 검색 API (fallback)
-    const res2 = await fetch(
-      `${NAVER_API}/search?query=${encodeURIComponent(query)}`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
-    );
-    if (res2.ok) {
-      const data2 = await res2.json();
-      const items = data2?.result?.d || data2?.result?.items || data2?.result?.stock || [];
-      return items.slice(0, 10).map((item: any) => ({
-        symbol: item.code || item.itemCode || item.reutersCode || '',
-        name: item.name || item.stockName || '',
-        market: 'KR' as const,
-      }));
-    }
-
-    return [];
+    return localResults.slice(0, 15);
   } catch (error) {
     console.error('searchStocks error:', error);
     return [];
