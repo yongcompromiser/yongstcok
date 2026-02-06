@@ -98,43 +98,65 @@ export async function searchStocks(query: string): Promise<Stock[]> {
   }
 }
 
-// 주가 차트 데이터
+// 주가 차트 데이터 (Yahoo Finance)
 export async function getStockChart(
   symbol: string,
   period: 'day' | 'week' | 'month' | 'year' = 'day',
   count: number = 120
 ): Promise<CandleData[]> {
-  try {
-    const now = new Date();
-    const endTime = formatDateKRX(now);
-    const startDate = new Date(now);
-    if (period === 'year') startDate.setFullYear(now.getFullYear() - 5);
-    else if (period === 'month') startDate.setFullYear(now.getFullYear() - 2);
-    else startDate.setMonth(now.getMonth() - 6);
-    const startTime = formatDateKRX(startDate);
+  // Yahoo Finance 기간/간격 매핑
+  const periodMap: Record<string, { range: string; interval: string }> = {
+    day: { range: '6mo', interval: '1d' },
+    week: { range: '2y', interval: '1wk' },
+    month: { range: '5y', interval: '1mo' },
+    year: { range: '10y', interval: '1mo' },
+  };
 
-    const res = await fetch(
-      `${NAVER_API}/stock/${symbol}/chart?timeframe=${period}&count=${count}`,
-      {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        next: { revalidate: 300 },
+  const { range, interval } = periodMap[period];
+  const yahooSymbol = `${symbol}.KS`; // KOSPI: .KS, KOSDAQ: .KQ
+
+  // KOSDAQ 종목 판별 (간이)
+  const kosdaqPrefixes = ['0', '1', '2', '3', '4', '9'];
+  const isKosdaq = symbol.length === 6 && kosdaqPrefixes.includes(symbol[0]) === false;
+  const trySymbols = [yahooSymbol, `${symbol}.KQ`];
+
+  for (const sym of trySymbols) {
+    try {
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?range=${range}&interval=${interval}`,
+        {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          next: { revalidate: 300 },
+        }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+
+      const result = data?.chart?.result?.[0];
+      if (!result?.timestamp || !result?.indicators?.quote?.[0]) continue;
+
+      const timestamps = result.timestamp;
+      const quote = result.indicators.quote[0];
+
+      const candles: CandleData[] = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        if (quote.open[i] == null) continue;
+        candles.push({
+          time: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
+          open: Math.round(quote.open[i]),
+          high: Math.round(quote.high[i]),
+          low: Math.round(quote.low[i]),
+          close: Math.round(quote.close[i]),
+          volume: quote.volume[i] || 0,
+        });
       }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
 
-    return (data || []).map((item: any) => ({
-      time: item.localDate || item.dt,
-      open: Number(item.openPrice || item.o),
-      high: Number(item.highPrice || item.h),
-      low: Number(item.lowPrice || item.l),
-      close: Number(item.closePrice || item.c),
-      volume: Number(item.accumulatedTradingVolume || item.v),
-    }));
-  } catch (error) {
-    console.error('getStockChart error:', error);
-    return [];
+      if (candles.length > 0) return candles;
+    } catch (error) {
+      console.error(`getStockChart error (${sym}):`, error);
+    }
   }
+  return [];
 }
 
 // 시장 상승/하락 TOP

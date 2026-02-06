@@ -17,10 +17,8 @@ const PERIOD_OPTIONS: { label: string; value: Period }[] = [
   { label: '년봉', value: 'year' },
 ];
 
-// 클라이언트에서 직접 Naver API 호출 (서버사이드 차단 우회)
 async function fetchChartData(symbol: string, period: Period): Promise<CandleData[]> {
   try {
-    // 먼저 우리 API 시도
     const res = await fetch(`/api/stock/chart?symbol=${symbol}&period=${period}&count=120`);
     if (res.ok) {
       const data = await res.json();
@@ -28,30 +26,6 @@ async function fetchChartData(symbol: string, period: Period): Promise<CandleDat
         return data.chart;
       }
     }
-
-    // API가 빈 결과 반환 시 직접 Naver 호출 (CORS 허용된 경우만)
-    const naverRes = await fetch(
-      `https://m.stock.naver.com/api/stock/${symbol}/chart?timeframe=${period}&count=120`,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-        },
-        mode: 'cors',
-      }
-    );
-
-    if (naverRes.ok) {
-      const naverData = await naverRes.json();
-      return (naverData || []).map((item: any) => ({
-        time: item.localDate || item.dt,
-        open: Number(item.openPrice || item.o),
-        high: Number(item.highPrice || item.h),
-        low: Number(item.lowPrice || item.l),
-        close: Number(item.closePrice || item.c),
-        volume: Number(item.accumulatedTradingVolume || item.v),
-      }));
-    }
-
     return [];
   } catch (error) {
     console.error('fetchChartData error:', error);
