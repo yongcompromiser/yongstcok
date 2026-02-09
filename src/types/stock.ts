@@ -217,3 +217,31 @@ export interface EconomyData {
   fredIndicators: FredIndicator[];
   ecosIndicators: FredIndicator[];
 }
+
+// ── 금융위원회 (공공데이터포털) ──
+
+// 공매도 현황
+export interface ShortSellingItem {
+  date: string;
+  stockCode: string;
+  stockName: string;
+  market: string;
+  shortVolume: number;
+  shortAmount: number;
+  totalVolume: number;
+  shortRatio: number;
+}
+
+// 주식 거래 순위
+export interface StockRankItem {
+  date: string;
+  stockCode: string;
+  stockName: string;
+  market: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  tradingValue: number;
+  marketCap: number;
+}

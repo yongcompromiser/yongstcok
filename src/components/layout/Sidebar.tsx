@@ -14,6 +14,7 @@ import {
   Gem,
   BarChart3,
   Building,
+  Activity,
   StickyNote,
   FileCheck,
   Newspaper,
@@ -43,6 +44,7 @@ const economyNavItems: NavItem[] = [
   { title: '원자재', href: '/economy/commodities', icon: Gem },
   { title: '미국 경제', href: '/economy/us_economy', icon: BarChart3 },
   { title: '한국 경제', href: '/economy/korea', icon: Building },
+  { title: '시장 동향', href: '/economy/market', icon: Activity },
 ];
 
 const infoNavItems: NavItem[] = [
