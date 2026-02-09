@@ -171,17 +171,24 @@ export async function getStockChart(
   return [];
 }
 
-// 시장 상승/하락 TOP
-export async function getMarketTopStocks(
-  market: 'KOSPI' | 'KOSDAQ' = 'KOSPI',
-  type: 'rise' | 'fall' = 'rise',
-  count: number = 5
+// ETN/ETF 등 파생상품 필터
+function isDerivativeProduct(symbol: string, name: string): boolean {
+  // ETN 코드 (5xxxxx)
+  if (symbol.length === 6 && symbol[0] === '5') return true;
+  // 이름 기반 필터
+  if (/ETN|ETF|레버리지|인버스|선물/i.test(name)) return true;
+  return false;
+}
+
+// 단일 시장 상승/하락 조회 (내부용)
+async function fetchMarketRanking(
+  market: 'KOSPI' | 'KOSDAQ',
+  type: 'rise' | 'fall',
+  fetchSize: number
 ): Promise<{ symbol: string; name: string; price: number; change: number; changePercent: number }[]> {
-  // 여러 엔드포인트 시도
   const urls = [
-    `${NAVER_API}/domestic/ranking/${type === 'rise' ? 'riseFall' : 'riseFall'}?sospiCategory=${market}&isRise=${type === 'rise'}&page=1&pageSize=${count}`,
-    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=${market}&page=1&pageSize=${count}`,
-    `${NAVER_API}/stocks/${type === 'rise' ? 'up' : 'down'}?page=1&pageSize=${count}`,
+    `${NAVER_API}/domestic/ranking/riseFall?sospiCategory=${market}&isRise=${type === 'rise'}&page=1&pageSize=${fetchSize}`,
+    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=${market}&page=1&pageSize=${fetchSize}`,
   ];
 
   for (const url of urls) {
@@ -196,7 +203,7 @@ export async function getMarketTopStocks(
       const stocks = data.stocks || data.datas || data.result || data || [];
 
       if (Array.isArray(stocks) && stocks.length > 0) {
-        return stocks.slice(0, count).map((item: any) => ({
+        return stocks.map((item: any) => ({
           symbol: item.itemCode || item.cd || item.code || item.stockCode || '',
           name: item.stockName || item.nm || item.name || '',
           price: parseNum(item.closePrice || item.nv || item.price),
@@ -208,9 +215,33 @@ export async function getMarketTopStocks(
       continue;
     }
   }
-
-  console.error('getMarketTopStocks: all endpoints failed');
   return [];
+}
+
+// 시장 상승/하락 TOP (KOSPI + KOSDAQ 합산, ETN/ETF 제외)
+export async function getMarketTopStocks(
+  market: 'KOSPI' | 'KOSDAQ' = 'KOSPI',
+  type: 'rise' | 'fall' = 'rise',
+  count: number = 5
+): Promise<{ symbol: string; name: string; price: number; change: number; changePercent: number }[]> {
+  const fetchSize = count + 15; // 파생상품 제외 후에도 충분한 수
+
+  // KOSPI + KOSDAQ 병렬 조회
+  const [kospi, kosdaq] = await Promise.all([
+    fetchMarketRanking('KOSPI', type, fetchSize),
+    fetchMarketRanking('KOSDAQ', type, fetchSize),
+  ]);
+
+  // 합산 → 파생상품 제외 → 등락률 기준 정렬
+  const merged = [...kospi, ...kosdaq]
+    .filter((s) => s.symbol && !isDerivativeProduct(s.symbol, s.name))
+    .sort((a, b) =>
+      type === 'rise'
+        ? b.changePercent - a.changePercent
+        : a.changePercent - b.changePercent
+    );
+
+  return merged.slice(0, count);
 }
 
 // 시장 지수 (코스피, 코스닥)
