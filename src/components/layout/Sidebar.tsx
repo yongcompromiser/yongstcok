@@ -9,6 +9,7 @@ import {
   Star,
   Briefcase,
   GitCompare,
+  Globe,
   FileText,
   StickyNote,
   Newspaper,
@@ -30,6 +31,7 @@ const mainNavItems: NavItem[] = [
   { title: '관심기업', href: '/watchlist', icon: Star },
   { title: '포트폴리오', href: '/portfolio', icon: Briefcase },
   { title: '기업비교', href: '/compare', icon: GitCompare },
+  { title: '경제지표', href: '/economy', icon: Globe },
 ];
 
 const infoNavItems: NavItem[] = [

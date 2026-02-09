@@ -173,3 +173,47 @@ export interface User {
   role: 'user' | 'premium' | 'admin';
   createdAt: Date;
 }
+
+// ── 경제지표 ──
+
+// Fear & Greed 지수
+export interface FearGreedData {
+  value: number;
+  classification: string;
+  timestamp: string;
+}
+
+// 환율
+export interface ExchangeRate {
+  currency: string;    // USD, EUR, JPY, CNY
+  rate: number;        // 원화 기준
+  change: number;
+  changePercent: number;
+}
+
+// 원자재
+export interface CommodityPrice {
+  name: string;        // WTI, Gold, Silver
+  price: number;
+  change: number;
+  changePercent: number;
+  unit: string;        // USD/bbl, USD/oz
+}
+
+// FRED/ECOS 지표
+export interface FredIndicator {
+  seriesId: string;
+  name: string;
+  value: number;
+  date: string;
+  unit: string;
+}
+
+// 경제지표 통합 데이터
+export interface EconomyData {
+  fearGreed: FearGreedData | null;
+  exchangeRates: ExchangeRate[];
+  commodities: CommodityPrice[];
+  fredIndicators: FredIndicator[];
+  ecosIndicators: FredIndicator[];
+}
