@@ -7,6 +7,12 @@ import {
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
+// 네이버 API는 "1,370.50" 형태로 콤마 포함 → 제거 후 파싱
+function parseNum(v: any): number {
+  if (v == null) return 0;
+  return parseFloat(String(v).replace(/,/g, '')) || 0;
+}
+
 // ════════════════════════════════════════════
 // 카테고리 정의
 // ════════════════════════════════════════════
@@ -187,9 +193,9 @@ export async function getExchangeRates(): Promise<ExchangeRate[]> {
       const code = (item.reutersCode || '').replace('FX_', '').replace('KRW', '');
       return {
         currency: code || item.name,
-        rate: parseFloat(item.closePrice) || 0,
-        change: parseFloat(item.compareToPreviousClosePrice) || 0,
-        changePercent: parseFloat(item.fluctuationsRatio) || 0,
+        rate: parseNum(item.closePrice),
+        change: parseNum(item.compareToPreviousClosePrice),
+        changePercent: parseNum(item.fluctuationsRatio),
       };
     });
   } catch (e) {
@@ -213,9 +219,9 @@ async function getExchangeRatesFallback(): Promise<ExchangeRate[]> {
         if (!d) return;
         results.push({
           currency: code,
-          rate: parseFloat(d.closePrice) || 0,
-          change: parseFloat(d.compareToPreviousClosePrice) || 0,
-          changePercent: parseFloat(d.fluctuationsRatio) || 0,
+          rate: parseNum(d.closePrice),
+          change: parseNum(d.compareToPreviousClosePrice),
+          changePercent: parseNum(d.fluctuationsRatio),
         });
       } catch {
         // skip
@@ -238,9 +244,9 @@ export async function getDollarIndex(): Promise<CommodityPrice | null> {
     if (!d) return null;
     return {
       name: '달러인덱스 (DXY)',
-      price: parseFloat(d.closePrice) || 0,
-      change: parseFloat(d.compareToPreviousClosePrice) || 0,
-      changePercent: parseFloat(d.fluctuationsRatio) || 0,
+      price: parseNum(d.closePrice),
+      change: parseNum(d.compareToPreviousClosePrice),
+      changePercent: parseNum(d.fluctuationsRatio),
       unit: '',
     };
   } catch {
@@ -283,9 +289,9 @@ export async function getCommodityPrices(): Promise<CommodityPrice[]> {
       const def = nameMap[item.reutersCode] || { name: item.name, unit: '' };
       return {
         name: def.name,
-        price: parseFloat(item.closePrice) || 0,
-        change: parseFloat(item.compareToPreviousClosePrice) || 0,
-        changePercent: parseFloat(item.fluctuationsRatio) || 0,
+        price: parseNum(item.closePrice),
+        change: parseNum(item.compareToPreviousClosePrice),
+        changePercent: parseNum(item.fluctuationsRatio),
         unit: def.unit,
       };
     });
@@ -310,9 +316,9 @@ async function getCommodityPricesFallback(): Promise<CommodityPrice[]> {
         if (!d) return;
         results.push({
           name,
-          price: parseFloat(d.closePrice) || 0,
-          change: parseFloat(d.compareToPreviousClosePrice) || 0,
-          changePercent: parseFloat(d.fluctuationsRatio) || 0,
+          price: parseNum(d.closePrice),
+          change: parseNum(d.compareToPreviousClosePrice),
+          changePercent: parseNum(d.fluctuationsRatio),
           unit,
         });
       } catch {
