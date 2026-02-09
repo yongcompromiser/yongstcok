@@ -180,68 +180,88 @@ function isDerivativeProduct(symbol: string, name: string): boolean {
   return false;
 }
 
-// 단일 시장 상승/하락 조회 (내부용)
-async function fetchMarketRanking(
-  market: 'KOSPI' | 'KOSDAQ',
-  type: 'rise' | 'fall',
-  fetchSize: number
-): Promise<{ symbol: string; name: string; price: number; change: number; changePercent: number }[]> {
-  const urls = [
-    `${NAVER_API}/domestic/ranking/riseFall?sospiCategory=${market}&isRise=${type === 'rise'}&page=1&pageSize=${fetchSize}`,
-    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=${market}&page=1&pageSize=${fetchSize}`,
-  ];
-
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        next: { revalidate: 60 },
-      });
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      const stocks = data.stocks || data.datas || data.result || data || [];
-
-      if (Array.isArray(stocks) && stocks.length > 0) {
-        return stocks.map((item: any) => ({
-          symbol: item.itemCode || item.cd || item.code || item.stockCode || '',
-          name: item.stockName || item.nm || item.name || '',
-          price: parseNum(item.closePrice || item.nv || item.price),
-          change: parseNum(item.compareToPreviousClosePrice || item.cv || item.change),
-          changePercent: parseFloat(item.fluctuationsRatio || item.cr || item.changePercent) || 0,
-        }));
-      }
-    } catch {
-      continue;
-    }
-  }
-  return [];
-}
+type TopStock = { symbol: string; name: string; price: number; change: number; changePercent: number };
 
 // 시장 상승/하락 TOP (KOSPI + KOSDAQ 합산, ETN/ETF 제외)
 export async function getMarketTopStocks(
   market: 'KOSPI' | 'KOSDAQ' = 'KOSPI',
   type: 'rise' | 'fall' = 'rise',
   count: number = 5
-): Promise<{ symbol: string; name: string; price: number; change: number; changePercent: number }[]> {
+): Promise<TopStock[]> {
   const fetchSize = count + 15; // 파생상품 제외 후에도 충분한 수
 
-  // KOSPI + KOSDAQ 병렬 조회
-  const [kospi, kosdaq] = await Promise.all([
-    fetchMarketRanking('KOSPI', type, fetchSize),
-    fetchMarketRanking('KOSDAQ', type, fetchSize),
-  ]);
+  // 네이버 API 랭킹 엔드포인트 (KOSPI, KOSDAQ 각각)
+  const urls = [
+    `${NAVER_API}/domestic/ranking/riseFall?sospiCategory=KOSPI&isRise=${type === 'rise'}&page=1&pageSize=${fetchSize}`,
+    `${NAVER_API}/domestic/ranking/riseFall?sospiCategory=KOSDAQ&isRise=${type === 'rise'}&page=1&pageSize=${fetchSize}`,
+    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=KOSPI&page=1&pageSize=${fetchSize}`,
+    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=KOSDAQ&page=1&pageSize=${fetchSize}`,
+  ];
 
-  // 합산 → 파생상품 제외 → 등락률 기준 정렬
-  const merged = [...kospi, ...kosdaq]
-    .filter((s) => s.symbol && !isDerivativeProduct(s.symbol, s.name))
+  const allStocks: TopStock[] = [];
+
+  // 모든 URL 시도 (하나라도 성공하면 수집)
+  const fetches = urls.map(async (url) => {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 60 },
+      });
+      if (!res.ok) return [];
+
+      const data = await res.json();
+      const stocks = data.stocks || data.datas || data.result || data || [];
+
+      if (Array.isArray(stocks) && stocks.length > 0) {
+        return stocks.map((item: any) => ({
+          symbol: String(item.itemCode || item.cd || item.code || item.stockCode || ''),
+          name: String(item.stockName || item.nm || item.name || ''),
+          price: parseNum(item.closePrice || item.nv || item.price),
+          change: parseNum(item.compareToPreviousClosePrice || item.cv || item.change),
+          changePercent: parseFloat(item.fluctuationsRatio || item.cr || item.changePercent) || 0,
+        }));
+      }
+    } catch (err) {
+      console.error(`[getMarketTopStocks] fetch failed: ${url}`, err);
+    }
+    return [];
+  });
+
+  const results = await Promise.allSettled(fetches);
+  for (const r of results) {
+    if (r.status === 'fulfilled') allStocks.push(...r.value);
+  }
+
+  if (allStocks.length === 0) {
+    console.error('[getMarketTopStocks] all endpoints returned empty');
+    return [];
+  }
+
+  // symbol 기준 중복 제거
+  const seen = new Set<string>();
+  const unique = allStocks.filter((s) => {
+    if (!s.symbol || seen.has(s.symbol)) return false;
+    seen.add(s.symbol);
+    return true;
+  });
+
+  // 파생상품 제외 → 등락률 기준 정렬
+  const filtered = unique
+    .filter((s) => !isDerivativeProduct(s.symbol, s.name))
     .sort((a, b) =>
       type === 'rise'
         ? b.changePercent - a.changePercent
         : a.changePercent - b.changePercent
     );
 
-  return merged.slice(0, count);
+  // 필터 후 종목이 있으면 사용, 없으면 원본 사용
+  const final = filtered.length > 0 ? filtered : unique.sort((a, b) =>
+    type === 'rise'
+      ? b.changePercent - a.changePercent
+      : a.changePercent - b.changePercent
+  );
+
+  return final.slice(0, count);
 }
 
 // 시장 지수 (코스피, 코스닥)
