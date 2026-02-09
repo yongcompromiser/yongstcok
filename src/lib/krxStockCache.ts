@@ -65,7 +65,7 @@ async function loadKrxStocks(): Promise<void> {
         const mrkt = item.mrktCtg as string;
         if (mrkt !== 'KOSPI' && mrkt !== 'KOSDAQ') continue;
 
-        const symbol = (item.srtnCd as string)?.trim();
+        const symbol = (item.srtnCd as string)?.trim().replace(/^A/, '');
         const name = (item.itmsNm as string)?.trim();
         if (!symbol || !name || seen.has(symbol)) continue;
 

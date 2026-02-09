@@ -132,7 +132,7 @@ interface MultiSeriesChartProps {
   percentMode?: boolean;
 }
 
-function mergeSeriesData(series: SeriesData[], percentMode: boolean) {
+function mergeSeriesData(series: SeriesData[], percentMode: boolean, indexMode: boolean) {
   const dateMap = new Map<string, Record<string, number>>();
 
   for (const s of series) {
@@ -141,6 +141,8 @@ function mergeSeriesData(series: SeriesData[], percentMode: boolean) {
       const row = dateMap.get(pt.date) || {};
       if (percentMode && firstVal !== 0) {
         row[s.key] = ((pt.value - firstVal) / Math.abs(firstVal)) * 100;
+      } else if (indexMode && firstVal !== 0) {
+        row[s.key] = (pt.value / firstVal) * 100;
       } else {
         row[s.key] = pt.value;
       }
@@ -159,7 +161,22 @@ export function MultiSeriesChart({
   height = 400,
   percentMode = false,
 }: MultiSeriesChartProps) {
-  const chartData = useMemo(() => mergeSeriesData(series, percentMode), [series, percentMode]);
+  // 3개+ 시리즈 & 변화율 OFF → 자동 index(100) 정규화
+  const autoIndex = series.length >= 3 && !percentMode;
+
+  const chartData = useMemo(
+    () => mergeSeriesData(series, percentMode, autoIndex),
+    [series, percentMode, autoIndex]
+  );
+
+  // 원래 값 역산용: firstValues[key] = 시리즈 첫 번째 값
+  const firstValues = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of series) {
+      map[s.key] = s.data.length > 0 ? s.data[0].value : 0;
+    }
+    return map;
+  }, [series]);
 
   if (isLoading) {
     return <Skeleton className="w-full" style={{ height }} />;
@@ -233,13 +250,18 @@ export function MultiSeriesChart({
           </>
         ) : (
           <YAxis
-            tickFormatter={(v: number) => percentMode ? `${v.toFixed(1)}%` : formatValue(v)}
+            tickFormatter={(v: number) => {
+              if (percentMode) return `${v.toFixed(1)}%`;
+              if (autoIndex) return v.toFixed(0);
+              return formatValue(v);
+            }}
             tick={{ fontSize: 11 }}
             className="fill-muted-foreground"
             tickLine={false}
             axisLine={false}
             width={65}
             domain={['auto', 'auto']}
+            label={autoIndex ? { value: '기준=100', position: 'insideTopLeft', fontSize: 10, fill: '#888', offset: -5 } : undefined}
           />
         )}
         <Tooltip
@@ -256,6 +278,15 @@ export function MultiSeriesChart({
             const s = series.find((s) => s.key === n);
             if (percentMode) {
               return [`${v.toFixed(2)}%`, s?.label || n];
+            }
+            if (autoIndex) {
+              const first = firstValues[n] || 0;
+              const original = first !== 0 ? (v / 100) * first : 0;
+              const unitStr = s?.unit ? ` ${s.unit}` : '';
+              return [
+                `${original.toLocaleString(undefined, { maximumFractionDigits: 2 })}${unitStr} (${v.toFixed(1)})`,
+                s?.label || n,
+              ];
             }
             return [
               `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}${s?.unit ? ' ' + s.unit : ''}`,
