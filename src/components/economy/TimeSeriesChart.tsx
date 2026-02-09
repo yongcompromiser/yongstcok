@@ -138,7 +138,7 @@ function mergeSeriesData(series: SeriesData[], percentMode: boolean) {
   for (const s of series) {
     const firstVal = s.data.length > 0 ? s.data[0].value : 1;
     for (const pt of s.data) {
-      const row = dateMap.get(pt.date) || { date: 0 };
+      const row = dateMap.get(pt.date) || {};
       if (percentMode && firstVal !== 0) {
         row[s.key] = ((pt.value - firstVal) / Math.abs(firstVal)) * 100;
       } else {
