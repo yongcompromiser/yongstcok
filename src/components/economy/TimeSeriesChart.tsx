@@ -1,15 +1,20 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
+  Legend,
 } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { SeriesData } from '@/hooks/useEconomyChart';
 
 interface TimeSeriesPoint {
   date: string;
@@ -23,6 +28,23 @@ interface TimeSeriesChartProps {
   unit?: string;
   color?: string;
 }
+
+// 날짜 포맷
+const formatDate = (dateStr: string) => {
+  if (dateStr.includes('Q')) return dateStr;
+  if (dateStr.length === 6) {
+    return `${dateStr.slice(2, 4)}.${dateStr.slice(4, 6)}`;
+  }
+  const parts = dateStr.split('-');
+  if (parts.length === 3) return `${parts[1]}.${parts[2]}`;
+  return dateStr;
+};
+
+const formatValue = (v: number) => {
+  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
 
 export function TimeSeriesChart({
   data,
@@ -45,25 +67,6 @@ export function TimeSeriesChart({
       </div>
     );
   }
-
-  // 날짜 포맷
-  const formatDate = (dateStr: string) => {
-    if (dateStr.includes('Q')) return dateStr; // 2024Q1
-    if (dateStr.length === 6) {
-      // YYYYMM → YY.MM
-      return `${dateStr.slice(2, 4)}.${dateStr.slice(4, 6)}`;
-    }
-    // YYYY-MM-DD → MM.DD
-    const parts = dateStr.split('-');
-    if (parts.length === 3) return `${parts[1]}.${parts[2]}`;
-    return dateStr;
-  };
-
-  const formatValue = (v: number) => {
-    if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-    return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  };
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -116,6 +119,146 @@ export function TimeSeriesChart({
           activeDot={{ r: 4, strokeWidth: 0 }}
         />
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── 멀티 시리즈 차트 ──
+
+interface MultiSeriesChartProps {
+  series: SeriesData[];
+  isLoading?: boolean;
+  height?: number;
+  percentMode?: boolean;
+}
+
+function mergeSeriesData(series: SeriesData[], percentMode: boolean) {
+  const dateMap = new Map<string, Record<string, number>>();
+
+  for (const s of series) {
+    const firstVal = s.data.length > 0 ? s.data[0].value : 1;
+    for (const pt of s.data) {
+      const row = dateMap.get(pt.date) || { date: 0 };
+      if (percentMode && firstVal !== 0) {
+        row[s.key] = ((pt.value - firstVal) / Math.abs(firstVal)) * 100;
+      } else {
+        row[s.key] = pt.value;
+      }
+      dateMap.set(pt.date, row);
+    }
+  }
+
+  return Array.from(dateMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, vals]) => ({ date, ...vals } as Record<string, string | number>));
+}
+
+export function MultiSeriesChart({
+  series,
+  isLoading,
+  height = 400,
+  percentMode = false,
+}: MultiSeriesChartProps) {
+  const chartData = useMemo(() => mergeSeriesData(series, percentMode), [series, percentMode]);
+
+  if (isLoading) {
+    return <Skeleton className="w-full" style={{ height }} />;
+  }
+
+  if (series.length === 0 || chartData.length === 0) {
+    return (
+      <div
+        className="flex items-center justify-center text-sm text-muted-foreground border rounded-lg"
+        style={{ height }}
+      >
+        차트 데이터가 없습니다
+      </div>
+    );
+  }
+
+  // 단일 시리즈 → AreaChart
+  if (series.length === 1) {
+    const s = series[0];
+    const singleData = percentMode
+      ? chartData.map((d) => ({ date: String(d.date), value: (d[s.key] as number) ?? 0 }))
+      : s.data;
+
+    return (
+      <TimeSeriesChart
+        data={singleData}
+        height={height}
+        unit={percentMode ? '%' : s.unit}
+        color={s.color}
+      />
+    );
+  }
+
+  // 멀티 시리즈 → LineChart
+  const unitLabel = percentMode ? '%' : '';
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" className="stroke-muted/40" />
+        <XAxis
+          dataKey="date"
+          tickFormatter={formatDate}
+          tick={{ fontSize: 11 }}
+          className="fill-muted-foreground"
+          tickLine={false}
+          axisLine={false}
+          minTickGap={40}
+        />
+        <YAxis
+          tickFormatter={(v: number) => percentMode ? `${v.toFixed(1)}%` : formatValue(v)}
+          tick={{ fontSize: 11 }}
+          className="fill-muted-foreground"
+          tickLine={false}
+          axisLine={false}
+          width={65}
+          domain={['auto', 'auto']}
+        />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: 'hsl(var(--card))',
+            borderColor: 'hsl(var(--border))',
+            borderRadius: '8px',
+            fontSize: '13px',
+          }}
+          labelFormatter={(label) => `${label}`}
+          formatter={(value: any, name: any) => {
+            const v = Number(value) || 0;
+            const n = String(name || '');
+            const s = series.find((s) => s.key === n);
+            if (percentMode) {
+              return [`${v.toFixed(2)}%`, s?.label || n];
+            }
+            return [
+              `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}${s?.unit ? ' ' + s.unit : ''}`,
+              s?.label || n,
+            ];
+          }}
+        />
+        <Legend
+          formatter={(value: string) => {
+            const s = series.find((s) => s.key === value);
+            return s?.label || value;
+          }}
+          wrapperStyle={{ fontSize: '12px' }}
+        />
+        {series.map((s) => (
+          <Line
+            key={s.key}
+            type="monotone"
+            dataKey={s.key}
+            stroke={s.color}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 0 }}
+            connectNulls
+          />
+        ))}
+      </LineChart>
     </ResponsiveContainer>
   );
 }

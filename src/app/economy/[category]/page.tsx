@@ -1,29 +1,22 @@
 'use client';
 
-import React, { use, useState } from 'react';
+import React, { use, useState, useCallback, useMemo } from 'react';
 import { notFound } from 'next/navigation';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FearGreedGauge } from '@/components/economy/FearGreedGauge';
 import { IndicatorCard } from '@/components/economy/IndicatorCard';
-import { TimeSeriesChart } from '@/components/economy/TimeSeriesChart';
+import { MultiSeriesChart } from '@/components/economy/TimeSeriesChart';
 import { useEconomyCategory } from '@/hooks/useEconomy';
-import { useEconomyChart } from '@/hooks/useEconomyChart';
+import { useMultiEconomyChart } from '@/hooks/useEconomyChart';
+import type { ChartItem } from '@/hooks/useEconomyChart';
 import type { EconomyCategory, CategoryData } from '@/lib/api/economy';
+import type { Period } from '@/lib/api/economyHistory';
 import { cn } from '@/lib/utils';
 
 // ── 차트 항목 정의 ──
-
-interface ChartItem {
-  key: string;
-  label: string;
-  source: 'fred' | 'yahoo' | 'ecos' | 'fng';
-  params: Record<string, string>;
-  unit?: string;
-  color?: string;
-}
 
 const SENTIMENT_CHARTS: ChartItem[] = [
   { key: 'fng', label: 'Fear & Greed', source: 'fng', params: {}, color: '#eab308' },
@@ -132,6 +125,9 @@ const CATEGORY_META: Record<EconomyCategory, { title: string; description: strin
 
 const VALID_CATEGORIES = Object.keys(CATEGORY_META) as EconomyCategory[];
 
+const PERIODS: Period[] = ['1M', '3M', '6M', '1Y', '3Y', '5Y'];
+const MAX_SELECTED = 5;
+
 // ── 페이지 ──
 
 export default function EconomyCategoryPage({
@@ -164,9 +160,25 @@ export default function EconomyCategoryPage({
 function CategoryContent({ category }: { category: EconomyCategory }) {
   const { data, isLoading, refetch, isFetching } = useEconomyCategory(category);
   const chartItems = CHARTS_BY_CATEGORY[category];
-  const [selectedKey, setSelectedKey] = useState(chartItems[0]?.key || '');
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([chartItems[0]?.key || '']);
+  const [period, setPeriod] = useState<Period>('1Y');
+  const [percentMode, setPercentMode] = useState(false);
 
-  const selectedItem = chartItems.find((i) => i.key === selectedKey) || chartItems[0];
+  const selectedItems = useMemo(
+    () => chartItems.filter((i) => selectedKeys.includes(i.key)),
+    [chartItems, selectedKeys]
+  );
+
+  const toggleKey = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      if (prev.includes(key)) {
+        if (prev.length <= 1) return prev; // 최소 1개
+        return prev.filter((k) => k !== key);
+      }
+      if (prev.length >= MAX_SELECTED) return prev; // 최대 5개
+      return [...prev, key];
+    });
+  }, []);
 
   if (category === 'sentiment') {
     return (
@@ -176,9 +188,13 @@ function CategoryContent({ category }: { category: EconomyCategory }) {
         refetch={refetch}
         isFetching={isFetching}
         chartItems={chartItems}
-        selectedKey={selectedKey}
-        setSelectedKey={setSelectedKey}
-        selectedItem={selectedItem}
+        selectedKeys={selectedKeys}
+        toggleKey={toggleKey}
+        selectedItems={selectedItems}
+        period={period}
+        setPeriod={setPeriod}
+        percentMode={percentMode}
+        setPercentMode={setPercentMode}
       />
     );
   }
@@ -191,10 +207,77 @@ function CategoryContent({ category }: { category: EconomyCategory }) {
       isFetching={isFetching}
       category={category}
       chartItems={chartItems}
-      selectedKey={selectedKey}
-      setSelectedKey={setSelectedKey}
-      selectedItem={selectedItem}
+      selectedKeys={selectedKeys}
+      toggleKey={toggleKey}
+      selectedItems={selectedItems}
+      period={period}
+      setPeriod={setPeriod}
+      percentMode={percentMode}
+      setPercentMode={setPercentMode}
     />
+  );
+}
+
+// ── 기간 선택 바 ──
+
+function PeriodBar({ period, setPeriod }: { period: Period; setPeriod: (p: Period) => void }) {
+  return (
+    <div className="flex gap-1">
+      {PERIODS.map((p) => (
+        <button
+          key={p}
+          onClick={() => setPeriod(p)}
+          className={cn(
+            'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
+            period === p
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── 체크박스 칩 ──
+
+function ChipSelector({
+  items,
+  selectedKeys,
+  toggleKey,
+}: {
+  items: ChartItem[];
+  selectedKeys: string[];
+  toggleKey: (key: string) => void;
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {items.map((item) => {
+        const isSelected = selectedKeys.includes(item.key);
+        return (
+          <button
+            key={item.key}
+            onClick={() => toggleKey(item.key)}
+            className={cn(
+              'px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap border transition-colors inline-flex items-center gap-1.5',
+              isSelected
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground'
+            )}
+          >
+            {isSelected && (
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: item.color || '#3b82f6' }}
+              />
+            )}
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -206,23 +289,28 @@ function SentimentLayout({
   refetch,
   isFetching,
   chartItems,
-  selectedKey,
-  setSelectedKey,
-  selectedItem,
+  selectedKeys,
+  toggleKey,
+  selectedItems,
+  period,
+  setPeriod,
+  percentMode,
+  setPercentMode,
 }: {
   data: CategoryData | undefined;
   isLoading: boolean;
   refetch: () => void;
   isFetching: boolean;
   chartItems: ChartItem[];
-  selectedKey: string;
-  setSelectedKey: (key: string) => void;
-  selectedItem: ChartItem;
+  selectedKeys: string[];
+  toggleKey: (key: string) => void;
+  selectedItems: ChartItem[];
+  period: Period;
+  setPeriod: (p: Period) => void;
+  percentMode: boolean;
+  setPercentMode: (v: boolean) => void;
 }) {
-  const { data: chartData, isLoading: chartLoading } = useEconomyChart(
-    selectedItem?.source || null,
-    selectedItem?.params || {}
-  );
+  const { series, isLoading: chartLoading } = useMultiEconomyChart(selectedItems, period);
 
   return (
     <>
@@ -269,25 +357,28 @@ function SentimentLayout({
         </CardContent>
       </Card>
 
-      {/* 차트 탭 */}
-      <ChartTabs
-        items={chartItems}
-        selectedKey={selectedKey}
-        onSelect={setSelectedKey}
-      />
-
-      {/* 차트 */}
+      {/* 차트 컨트롤 */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{selectedItem.label} 추이</CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base">
+              {selectedItems.length === 1 ? `${selectedItems[0].label} 추이` : '지표 비교'}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {selectedKeys.length >= 2 && (
+                <PercentToggle percentMode={percentMode} setPercentMode={setPercentMode} />
+              )}
+              <PeriodBar period={period} setPeriod={setPeriod} />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <TimeSeriesChart
-            data={chartData || []}
+        <CardContent className="space-y-3">
+          <ChipSelector items={chartItems} selectedKeys={selectedKeys} toggleKey={toggleKey} />
+          <MultiSeriesChart
+            series={series}
             isLoading={chartLoading}
             height={400}
-            unit={selectedItem.unit}
-            color={selectedItem.color}
+            percentMode={percentMode && selectedKeys.length >= 2}
           />
         </CardContent>
       </Card>
@@ -295,7 +386,7 @@ function SentimentLayout({
   );
 }
 
-// ── 일반 카테고리 레이아웃 (차트 + 탭 + 현재값) ──
+// ── 일반 카테고리 레이아웃 (차트 + 칩 + 현재값) ──
 
 function ChartLayout({
   data,
@@ -304,9 +395,13 @@ function ChartLayout({
   isFetching,
   category,
   chartItems,
-  selectedKey,
-  setSelectedKey,
-  selectedItem,
+  selectedKeys,
+  toggleKey,
+  selectedItems,
+  period,
+  setPeriod,
+  percentMode,
+  setPercentMode,
 }: {
   data: CategoryData | undefined;
   isLoading: boolean;
@@ -314,14 +409,15 @@ function ChartLayout({
   isFetching: boolean;
   category: EconomyCategory;
   chartItems: ChartItem[];
-  selectedKey: string;
-  setSelectedKey: (key: string) => void;
-  selectedItem: ChartItem;
+  selectedKeys: string[];
+  toggleKey: (key: string) => void;
+  selectedItems: ChartItem[];
+  period: Period;
+  setPeriod: (p: Period) => void;
+  percentMode: boolean;
+  setPercentMode: (v: boolean) => void;
 }) {
-  const { data: chartData, isLoading: chartLoading } = useEconomyChart(
-    selectedItem?.source || null,
-    selectedItem?.params || {}
-  );
+  const { series, isLoading: chartLoading } = useMultiEconomyChart(selectedItems, period);
 
   return (
     <>
@@ -329,30 +425,33 @@ function ChartLayout({
         <RefreshBtn refetch={refetch} isFetching={isFetching} />
       </div>
 
-      {/* 탭 바 */}
-      <ChartTabs
-        items={chartItems}
-        selectedKey={selectedKey}
-        onSelect={setSelectedKey}
-      />
-
       {/* 차트 */}
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">{selectedItem.label}</CardTitle>
-            {selectedItem.unit && (
-              <span className="text-xs text-muted-foreground">{selectedItem.unit}</span>
-            )}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base">
+                {selectedItems.length === 1 ? selectedItems[0].label : '지표 비교'}
+              </CardTitle>
+              {selectedItems.length === 1 && selectedItems[0].unit && (
+                <span className="text-xs text-muted-foreground">{selectedItems[0].unit}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedKeys.length >= 2 && (
+                <PercentToggle percentMode={percentMode} setPercentMode={setPercentMode} />
+              )}
+              <PeriodBar period={period} setPeriod={setPeriod} />
+            </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <TimeSeriesChart
-            data={chartData || []}
+        <CardContent className="space-y-3">
+          <ChipSelector items={chartItems} selectedKeys={selectedKeys} toggleKey={toggleKey} />
+          <MultiSeriesChart
+            series={series}
             isLoading={chartLoading}
             height={400}
-            unit={selectedItem.unit}
-            color={selectedItem.color}
+            percentMode={percentMode && selectedKeys.length >= 2}
           />
         </CardContent>
       </Card>
@@ -363,34 +462,29 @@ function ChartLayout({
   );
 }
 
-// ── 탭 바 ──
+// ── 변화율 토글 ──
 
-function ChartTabs({
-  items,
-  selectedKey,
-  onSelect,
+function PercentToggle({
+  percentMode,
+  setPercentMode,
 }: {
-  items: ChartItem[];
-  selectedKey: string;
-  onSelect: (key: string) => void;
+  percentMode: boolean;
+  setPercentMode: (v: boolean) => void;
 }) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-      {items.map((item) => (
-        <button
-          key={item.key}
-          onClick={() => onSelect(item.key)}
-          className={cn(
-            'px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap border transition-colors',
-            selectedKey === item.key
-              ? 'bg-primary text-primary-foreground border-primary'
-              : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground'
-          )}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
+    <button
+      onClick={() => setPercentMode(!percentMode)}
+      className={cn(
+        'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
+        percentMode
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+      )}
+      title="변화율(%) 모드"
+    >
+      <BarChart3 className="w-3.5 h-3.5" />
+      %
+    </button>
   );
 }
 
