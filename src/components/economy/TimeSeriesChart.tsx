@@ -193,12 +193,12 @@ export function MultiSeriesChart({
     );
   }
 
-  // 멀티 시리즈 → LineChart
-  const unitLabel = percentMode ? '%' : '';
+  // 2개 시리즈 + 변화율 OFF → 이중 Y축
+  const dualAxis = series.length === 2 && !percentMode;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+      <LineChart data={chartData} margin={{ top: 5, right: dualAxis ? 10 : 10, left: 10, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted/40" />
         <XAxis
           dataKey="date"
@@ -209,15 +209,39 @@ export function MultiSeriesChart({
           axisLine={false}
           minTickGap={40}
         />
-        <YAxis
-          tickFormatter={(v: number) => percentMode ? `${v.toFixed(1)}%` : formatValue(v)}
-          tick={{ fontSize: 11 }}
-          className="fill-muted-foreground"
-          tickLine={false}
-          axisLine={false}
-          width={65}
-          domain={['auto', 'auto']}
-        />
+        {dualAxis ? (
+          <>
+            <YAxis
+              yAxisId="left"
+              tickFormatter={formatValue}
+              tick={{ fontSize: 11, fill: series[0].color }}
+              tickLine={false}
+              axisLine={false}
+              width={65}
+              domain={['auto', 'auto']}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tickFormatter={formatValue}
+              tick={{ fontSize: 11, fill: series[1].color }}
+              tickLine={false}
+              axisLine={false}
+              width={65}
+              domain={['auto', 'auto']}
+            />
+          </>
+        ) : (
+          <YAxis
+            tickFormatter={(v: number) => percentMode ? `${v.toFixed(1)}%` : formatValue(v)}
+            tick={{ fontSize: 11 }}
+            className="fill-muted-foreground"
+            tickLine={false}
+            axisLine={false}
+            width={65}
+            domain={['auto', 'auto']}
+          />
+        )}
         <Tooltip
           contentStyle={{
             backgroundColor: 'hsl(var(--card))',
@@ -246,7 +270,7 @@ export function MultiSeriesChart({
           }}
           wrapperStyle={{ fontSize: '12px' }}
         />
-        {series.map((s) => (
+        {series.map((s, i) => (
           <Line
             key={s.key}
             type="monotone"
@@ -256,6 +280,7 @@ export function MultiSeriesChart({
             dot={false}
             activeDot={{ r: 4, strokeWidth: 0 }}
             connectNulls
+            {...(dualAxis ? { yAxisId: i === 0 ? 'left' : 'right' } : {})}
           />
         ))}
       </LineChart>
