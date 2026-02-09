@@ -5,19 +5,22 @@ export async function GET() {
   const results: Record<string, any> = {};
 
   const urls = [
-    ['api_marketIndex', 'https://m.stock.naver.com/api/marketIndex/FX_USDKRW'],
-    ['api_marketIndex2', 'https://m.stock.naver.com/api/marketIndex/exchange/FX_USDKRW'],
-    ['api_index', 'https://m.stock.naver.com/api/index/marketIndex/FX_USDKRW'],
-    ['api_exchangeList', 'https://m.stock.naver.com/api/marketIndex/exchangeList'],
-    ['api_exchange', 'https://m.stock.naver.com/api/exchange/FX_USDKRW'],
-    ['api_commodityList', 'https://m.stock.naver.com/api/marketIndex/commodityList'],
-    ['api_commodity', 'https://m.stock.naver.com/api/marketIndex/worldCommodity/OILCL1'],
-    ['api_commodity2', 'https://m.stock.naver.com/api/commodity/OILCL1'],
-    ['api_worldCommodity', 'https://m.stock.naver.com/api/marketIndex/OILCL1'],
-    ['api_marketIndex_all', 'https://m.stock.naver.com/api/marketIndex/all'],
-    ['api_home', 'https://m.stock.naver.com/api/home'],
-    ['finance_api', 'https://api.stock.naver.com/marketindex/exchange/FX_USDKRW'],
-    ['finance_api2', 'https://api.stock.naver.com/marketindex/FX_USDKRW'],
+    // 환율 (확인됨)
+    ['exchange_usd', 'https://api.stock.naver.com/marketindex/exchange/FX_USDKRW'],
+    // 원자재 후보
+    ['commodity_wti', 'https://api.stock.naver.com/marketindex/worldCommodity/OILCL1'],
+    ['commodity_wti2', 'https://api.stock.naver.com/marketindex/commodity/OILCL1'],
+    ['commodity_wti3', 'https://api.stock.naver.com/marketindex/OILCL1'],
+    ['commodity_gold', 'https://api.stock.naver.com/marketindex/worldCommodity/CMDT_GC'],
+    ['commodity_gold2', 'https://api.stock.naver.com/marketindex/commodity/CMDT_GC'],
+    ['commodity_gold3', 'https://api.stock.naver.com/marketindex/CMDT_GC'],
+    // DXY
+    ['dxy', 'https://api.stock.naver.com/marketindex/exchange/DXY'],
+    ['dxy2', 'https://api.stock.naver.com/marketindex/DXY'],
+    // 리스트형
+    ['exchange_list', 'https://api.stock.naver.com/marketindex/exchangeList'],
+    ['commodity_list', 'https://api.stock.naver.com/marketindex/commodityList'],
+    ['marketindex_list', 'https://api.stock.naver.com/marketindex'],
   ];
 
   for (const [name, url] of urls) {
@@ -26,7 +29,7 @@ export async function GET() {
       const body = await r.text();
       results[name] = {
         status: r.status,
-        body: body.substring(0, 500),
+        body: body.substring(0, 600),
       };
     } catch (e: any) {
       results[name] = { error: e.message };
