@@ -55,7 +55,7 @@ export async function getStockInfo(symbol: string): Promise<Stock | null> {
   }
 }
 
-// 종목 검색 (네이버 자동완성 API primary + 로컬 fallback)
+// 종목 검색 (네이버 자동완성 → KRX 캐시 → 로컬 fallback)
 export async function searchStocks(query: string): Promise<Stock[]> {
   try {
     // 1. 네이버 자동완성 API (Vercel 서버에서 정상 동작)
@@ -82,7 +82,22 @@ export async function searchStocks(query: string): Promise<Stock[]> {
       // 네이버 API 실패 시 fallback으로 진행
     }
 
-    // 2. 로컬 리스트 fallback
+    // 2. KRX 캐시 fallback (2,600+개 전체 종목)
+    try {
+      const { searchKrxStocks } = await import('@/lib/krxStockCache');
+      const krxResults = await searchKrxStocks(query);
+      if (krxResults.length > 0) {
+        return krxResults.map((item) => ({
+          symbol: item.symbol,
+          name: item.name,
+          market: 'KR' as const,
+        }));
+      }
+    } catch {
+      // KRX 캐시 실패 시 로컬 fallback으로 진행
+    }
+
+    // 3. 로컬 리스트 최종 fallback
     const { searchLocalStocks } = await import('@/lib/stockList');
     return searchLocalStocks(query).map((item) => ({
       symbol: item.symbol,

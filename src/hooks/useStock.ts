@@ -3,7 +3,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Stock, StockPrice, CandleData, CompanyDetail } from '@/types/stock';
-import { searchLocalStocks } from '@/lib/stockList';
+
+// 전체 종목 리스트 (KRX API → fallback: stockList.ts)
+export function useStockList() {
+  return useQuery<{ symbol: string; name: string; market: string }[]>({
+    queryKey: ['stockList'],
+    queryFn: async () => {
+      const res = await fetch('/api/stock/list');
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.stocks || [];
+    },
+    staleTime: 24 * 60 * 60 * 1000, // 24시간
+  });
+}
 
 // 개별 종목 시세 조회
 export function useStockPrice(symbol: string | null) {
@@ -20,26 +33,26 @@ export function useStockPrice(symbol: string | null) {
   });
 }
 
-// 종목 검색 (로컬 즉시 + 네이버 API 병합)
+// 종목 검색 (캐시된 리스트 즉시 + 서버 API 병합)
 export function useStockSearch(query: string) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [apiResults, setApiResults] = useState<(Stock & { market: string })[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { data: stockList } = useStockList();
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(timer);
   }, [query]);
 
-  // 로컬 검색 (즉시)
+  // 캐시된 종목 리스트에서 즉시 검색
   const localResults = useMemo(() => {
-    if (!debouncedQuery || debouncedQuery.length < 1) return [];
-    return searchLocalStocks(debouncedQuery).map((item) => ({
-      symbol: item.symbol,
-      name: item.name,
-      market: item.market as string,
-    }));
-  }, [debouncedQuery]);
+    if (!debouncedQuery || debouncedQuery.length < 1 || !stockList) return [];
+    const q = debouncedQuery.toLowerCase().trim();
+    return stockList
+      .filter((s) => s.name.toLowerCase().includes(q) || s.symbol.includes(q))
+      .slice(0, 15);
+  }, [debouncedQuery, stockList]);
 
   // 네이버 API 검색 (비동기)
   useEffect(() => {
