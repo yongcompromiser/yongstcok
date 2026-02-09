@@ -52,19 +52,19 @@ const DEFAULT_COLORS = [
 
 export function useMultiEconomyChart(items: ChartItem[], period: string) {
   const queries = useQueries({
-    queries: items.map((item, idx) => {
-      const params = new URLSearchParams({
-        source: item.source,
-        ...item.params,
-        period,
-      }).toString();
+    queries: items.map((item, idx) => ({
+      queryKey: ['economyChart', item.key, period] as const,
+      queryFn: async (): Promise<SeriesData> => {
+        try {
+          const url = new URLSearchParams({
+            source: item.source,
+            ...item.params,
+            period,
+          }).toString();
 
-      return {
-        queryKey: ['economyChart', item.source, item.params, period],
-        queryFn: async (): Promise<SeriesData> => {
-          const res = await fetch(`/api/economy/chart?${params}`);
-          if (!res.ok) return { key: item.key, label: item.label, color: item.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length], data: [], unit: item.unit || '' };
-          const json: ChartResponse = await res.json();
+          const res = await fetch(`/api/economy/chart?${url}`);
+          const json: ChartResponse = res.ok ? await res.json() : { data: [] };
+
           return {
             key: item.key,
             label: item.label,
@@ -72,15 +72,24 @@ export function useMultiEconomyChart(items: ChartItem[], period: string) {
             data: json.data || [],
             unit: item.unit || '',
           };
-        },
-        staleTime: 30 * 60 * 1000,
-      };
-    }),
+        } catch {
+          return {
+            key: item.key,
+            label: item.label,
+            color: item.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length],
+            data: [],
+            unit: item.unit || '',
+          };
+        }
+      },
+      staleTime: 30 * 60 * 1000,
+      retry: 2,
+    })),
   });
 
   const series = queries
     .map((q) => q.data)
-    .filter((d): d is SeriesData => !!d);
+    .filter((d): d is SeriesData => !!d && d.data.length > 0);
 
   const isLoading = queries.some((q) => q.isLoading);
 
