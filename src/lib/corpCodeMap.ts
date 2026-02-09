@@ -1,4 +1,5 @@
 // DART 기업 고유번호 매핑 (종목코드 → corp_code)
+// [FALLBACK용] 동적 캐시(corpCodeCache.ts) 로딩 실패 시에만 사용
 // 출처: DART OpenAPI corpCode.xml
 
 export const CORP_CODE_MAP: Record<string, string> = {

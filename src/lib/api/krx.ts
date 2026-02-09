@@ -55,47 +55,40 @@ export async function getStockInfo(symbol: string): Promise<Stock | null> {
   }
 }
 
-// 종목 검색 (로컬 + Yahoo Finance)
+// 종목 검색 (네이버 자동완성 API primary + 로컬 fallback)
 export async function searchStocks(query: string): Promise<Stock[]> {
   try {
-    // 로컬 검색
-    const { searchLocalStocks } = await import('@/lib/stockList');
-    const localResults = searchLocalStocks(query).map((item) => ({
-      symbol: item.symbol,
-      name: item.name,
-      market: 'KR' as const,
-    }));
-
-    // Yahoo Finance 검색 (보조)
+    // 1. 네이버 자동완성 API (Vercel 서버에서 정상 동작)
     try {
       const res = await fetch(
-        `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`,
+        `${NAVER_AC}/ac?q=${encodeURIComponent(query)}&target=stock&st=111&r_lt=111&r_format=json`,
         { headers: { 'User-Agent': 'Mozilla/5.0' } }
       );
       if (res.ok) {
         const data = await res.json();
-        const yahooResults = (data.quotes || [])
-          .filter((q: any) => q.exchange === 'KSC' || q.exchange === 'KOE')
-          .map((q: any) => ({
-            symbol: (q.symbol || '').replace(/\.(KS|KQ)$/, ''),
-            name: q.shortname || q.longname || '',
-            market: 'KR' as const,
-          }));
-
-        // 병합 (로컬 우선, 중복 제거)
-        const seen = new Set(localResults.map((r) => r.symbol));
-        for (const yr of yahooResults) {
-          if (!seen.has(yr.symbol) && yr.symbol) {
-            seen.add(yr.symbol);
-            localResults.push(yr);
-          }
+        const items = data?.items?.[0] || [];
+        if (Array.isArray(items) && items.length > 0) {
+          const results: Stock[] = items
+            .filter((item: any[]) => item[0] && item[1])
+            .map((item: any[]) => ({
+              symbol: String(item[0]).padStart(6, '0'),
+              name: item[1] as string,
+              market: 'KR' as const,
+            }));
+          if (results.length > 0) return results.slice(0, 15);
         }
       }
     } catch {
-      // Yahoo 실패해도 로컬 결과 반환
+      // 네이버 API 실패 시 fallback으로 진행
     }
 
-    return localResults.slice(0, 15);
+    // 2. 로컬 리스트 fallback
+    const { searchLocalStocks } = await import('@/lib/stockList');
+    return searchLocalStocks(query).map((item) => ({
+      symbol: item.symbol,
+      name: item.name,
+      market: 'KR' as const,
+    }));
   } catch (error) {
     console.error('searchStocks error:', error);
     return [];

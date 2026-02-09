@@ -1,5 +1,5 @@
 // 한국 주요 상장 종목 리스트 (KOSPI + KOSDAQ)
-// 검색용 로컬 데이터 - 외부 API 의존 없이 즉시 검색 가능
+// [FALLBACK용] 네이버 자동완성 API 실패 시에만 사용 - 확장 불필요
 
 export interface StockItem {
   symbol: string;
