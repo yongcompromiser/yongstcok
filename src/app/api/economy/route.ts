@@ -1,32 +1,27 @@
-import { NextResponse } from 'next/server';
-import {
-  getFearGreedIndex,
-  getFredSeries,
-  getExchangeRates,
-  getCommodityPrices,
-  getEcosSeries,
-} from '@/lib/api/economy';
-import { EconomyData } from '@/types/stock';
+import { NextRequest, NextResponse } from 'next/server';
+import { getEconomyByCategory, type EconomyCategory } from '@/lib/api/economy';
 
-export async function GET() {
+const VALID_CATEGORIES: EconomyCategory[] = [
+  'sentiment',
+  'rates',
+  'exchange',
+  'commodities',
+  'us_economy',
+  'korea',
+];
+
+export async function GET(request: NextRequest) {
   try {
-    const [fearGreed, exchangeRates, commodities, fredIndicators, ecosIndicators] =
-      await Promise.all([
-        getFearGreedIndex(),
-        getExchangeRates(),
-        getCommodityPrices(),
-        getFredSeries(),
-        getEcosSeries(),
-      ]);
+    const category = request.nextUrl.searchParams.get('category') as EconomyCategory | null;
 
-    const data: EconomyData = {
-      fearGreed,
-      exchangeRates,
-      commodities,
-      fredIndicators,
-      ecosIndicators,
-    };
+    if (!category || !VALID_CATEGORIES.includes(category)) {
+      return NextResponse.json(
+        { error: `category 파라미터 필요: ${VALID_CATEGORIES.join(', ')}` },
+        { status: 400 }
+      );
+    }
 
+    const data = await getEconomyByCategory(category);
     return NextResponse.json(data);
   } catch (error) {
     console.error('Economy API error:', error);

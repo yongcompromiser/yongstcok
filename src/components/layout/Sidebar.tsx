@@ -4,16 +4,19 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
-  Building2,
   TrendingUp,
   Star,
   Briefcase,
   GitCompare,
-  Globe,
-  FileText,
+  Gauge,
+  Landmark,
+  ArrowLeftRight,
+  Gem,
+  BarChart3,
+  Building,
   StickyNote,
-  Newspaper,
   FileCheck,
+  Newspaper,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -31,7 +34,15 @@ const mainNavItems: NavItem[] = [
   { title: '관심기업', href: '/watchlist', icon: Star },
   { title: '포트폴리오', href: '/portfolio', icon: Briefcase },
   { title: '기업비교', href: '/compare', icon: GitCompare },
-  { title: '경제지표', href: '/economy', icon: Globe },
+];
+
+const economyNavItems: NavItem[] = [
+  { title: '시장 심리', href: '/economy/sentiment', icon: Gauge },
+  { title: '금리·채권', href: '/economy/rates', icon: Landmark },
+  { title: '환율', href: '/economy/exchange', icon: ArrowLeftRight },
+  { title: '원자재', href: '/economy/commodities', icon: Gem },
+  { title: '미국 경제', href: '/economy/us_economy', icon: BarChart3 },
+  { title: '한국 경제', href: '/economy/korea', icon: Building },
 ];
 
 const infoNavItems: NavItem[] = [
@@ -69,6 +80,19 @@ export function Sidebar() {
           {/* 메인 메뉴 */}
           <div className="space-y-1">
             {mainNavItems.map((item) => (
+              <NavLink key={item.href} item={item} />
+            ))}
+          </div>
+
+          {/* 구분선 */}
+          <div className="border-t my-2" />
+
+          {/* 경제지표 */}
+          <div className="space-y-1">
+            <p className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              경제지표
+            </p>
+            {economyNavItems.map((item) => (
               <NavLink key={item.href} item={item} />
             ))}
           </div>
