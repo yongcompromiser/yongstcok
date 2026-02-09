@@ -7,7 +7,7 @@ import {
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
-// 네이버 API는 "1,370.50" 형태로 콤마 포함 → 제거 후 파싱
+// 네이버/Yahoo 숫자 파싱 (콤마 제거)
 function parseNum(v: any): number {
   if (v == null) return 0;
   return parseFloat(String(v).replace(/,/g, '')) || 0;
@@ -113,7 +113,6 @@ const FRED_HOUSING: FredSeriesDef[] = [
   { id: 'HOUST', name: '신규주택착공', unit: '천 호' },
 ];
 
-// 카테고리 → FRED 시리즈 매핑
 const FRED_BY_CATEGORY: Record<string, FredSeriesDef[]> = {
   sentiment: FRED_SENTIMENT,
   rates: FRED_RATES,
@@ -157,15 +156,16 @@ export async function getFredByCategory(category: string): Promise<FredIndicator
     })
   );
 
-  // 원본 순서 유지
   return series
     .map((s) => results.find((r) => r.seriesId === s.id))
     .filter((r): r is FredIndicator => r != null);
 }
 
 // ════════════════════════════════════════════
-// 네이버 금융 - 환율
+// 환율 - api.stock.naver.com (새 엔드포인트)
 // ════════════════════════════════════════════
+
+const NAVER_EXCHANGE_API = 'https://api.stock.naver.com/marketindex/exchange';
 
 const EXCHANGE_PAIRS = [
   { code: 'USD', reuters: 'FX_USDKRW' },
@@ -178,155 +178,112 @@ const EXCHANGE_PAIRS = [
 ];
 
 export async function getExchangeRates(): Promise<ExchangeRate[]> {
-  const reutersCodes = EXCHANGE_PAIRS.map((p) => p.reuters).join(',');
-  try {
-    const res = await fetch(
-      `https://m.stock.naver.com/front-api/marketIndex/productList?category=exchange&reutersCode=${reutersCodes}`,
-      { headers: { 'User-Agent': UA }, next: { revalidate: 300 } }
-    );
-    if (!res.ok) return await getExchangeRatesFallback();
-    const json = await res.json();
-    const items = json.result || [];
-    if (items.length === 0) return await getExchangeRatesFallback();
-
-    return items.map((item: any) => {
-      const code = (item.reutersCode || '').replace('FX_', '').replace('KRW', '');
-      return {
-        currency: code || item.name,
-        rate: parseNum(item.closePrice),
-        change: parseNum(item.compareToPreviousClosePrice),
-        changePercent: parseNum(item.fluctuationsRatio),
-      };
-    });
-  } catch (e) {
-    console.error('getExchangeRates error:', e);
-    return await getExchangeRatesFallback();
-  }
-}
-
-async function getExchangeRatesFallback(): Promise<ExchangeRate[]> {
   const results: ExchangeRate[] = [];
+
   await Promise.all(
     EXCHANGE_PAIRS.map(async ({ code, reuters }) => {
       try {
-        const res = await fetch(
-          `https://m.stock.naver.com/front-api/marketIndex/productDetail?reutersCode=${reuters}`,
-          { headers: { 'User-Agent': UA }, next: { revalidate: 300 } }
-        );
+        const res = await fetch(`${NAVER_EXCHANGE_API}/${reuters}`, {
+          headers: { 'User-Agent': UA },
+          next: { revalidate: 300 },
+        });
         if (!res.ok) return;
         const json = await res.json();
-        const d = json.result;
+        const d = json.exchangeInfo;
         if (!d) return;
         results.push({
           currency: code,
           rate: parseNum(d.closePrice),
-          change: parseNum(d.compareToPreviousClosePrice),
+          change: parseNum(d.fluctuations),
           changePercent: parseNum(d.fluctuationsRatio),
         });
-      } catch {
-        // skip
+      } catch (e) {
+        console.error(`Exchange ${code} error:`, e);
       }
     })
   );
-  return results;
+
+  // 원본 순서 유지
+  return EXCHANGE_PAIRS
+    .map((p) => results.find((r) => r.currency === p.code))
+    .filter((r): r is ExchangeRate => r != null);
 }
 
-// 달러인덱스 (별도 조회)
-export async function getDollarIndex(): Promise<CommodityPrice | null> {
+// ════════════════════════════════════════════
+// 원자재 + DXY - Yahoo Finance
+// ════════════════════════════════════════════
+
+const YAHOO_COMMODITIES = [
+  { ticker: 'CL=F', name: 'WTI 유가', unit: 'USD/bbl' },
+  { ticker: 'BZ=F', name: '브렌트유', unit: 'USD/bbl' },
+  { ticker: 'NG=F', name: '천연가스', unit: 'USD/MMBtu' },
+  { ticker: 'GC=F', name: '금', unit: 'USD/oz' },
+  { ticker: 'SI=F', name: '은', unit: 'USD/oz' },
+  { ticker: 'PL=F', name: '백금', unit: 'USD/oz' },
+  { ticker: 'PA=F', name: '팔라듐', unit: 'USD/oz' },
+  { ticker: 'HG=F', name: '구리', unit: 'USD/lb' },
+  { ticker: 'ZC=F', name: '옥수수', unit: 'cents/bu' },
+  { ticker: 'ZS=F', name: '대두', unit: 'cents/bu' },
+  { ticker: 'ZW=F', name: '밀', unit: 'cents/bu' },
+];
+
+async function getYahooQuote(ticker: string): Promise<{ price: number; prevClose: number } | null> {
   try {
-    const res = await fetch(
-      'https://m.stock.naver.com/front-api/marketIndex/productDetail?reutersCode=DXY',
-      { headers: { 'User-Agent': UA }, next: { revalidate: 300 } }
-    );
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=2d&interval=1d`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA },
+      next: { revalidate: 300 },
+    });
     if (!res.ok) return null;
     const json = await res.json();
-    const d = json.result;
-    if (!d) return null;
+    const meta = json.chart?.result?.[0]?.meta;
+    if (!meta) return null;
     return {
-      name: '달러인덱스 (DXY)',
-      price: parseNum(d.closePrice),
-      change: parseNum(d.compareToPreviousClosePrice),
-      changePercent: parseNum(d.fluctuationsRatio),
-      unit: '',
+      price: meta.regularMarketPrice || 0,
+      prevClose: meta.chartPreviousClose || meta.previousClose || 0,
     };
   } catch {
     return null;
   }
 }
 
-// ════════════════════════════════════════════
-// 네이버 금융 - 원자재
-// ════════════════════════════════════════════
-
-const COMMODITY_LIST = [
-  { code: 'OILCL1', name: 'WTI 유가', unit: 'USD/bbl' },
-  { code: 'OILBR1', name: '브렌트유', unit: 'USD/bbl' },
-  { code: 'CMDT_NG', name: '천연가스', unit: 'USD/MMBtu' },
-  { code: 'CMDT_GC', name: '금', unit: 'USD/oz' },
-  { code: 'CMDT_SI', name: '은', unit: 'USD/oz' },
-  { code: 'CMDT_PL', name: '백금', unit: 'USD/oz' },
-  { code: 'CMDT_PA', name: '팔라듐', unit: 'USD/oz' },
-  { code: 'CMDT_HG', name: '구리', unit: 'USD/lb' },
-  { code: 'CMDT_C', name: '옥수수', unit: 'cents/bu' },
-  { code: 'CMDT_S', name: '대두', unit: 'cents/bu' },
-  { code: 'CMDT_W', name: '밀', unit: 'cents/bu' },
-];
-
 export async function getCommodityPrices(): Promise<CommodityPrice[]> {
-  const codes = COMMODITY_LIST.map((c) => c.code).join(',');
-  try {
-    const res = await fetch(
-      `https://m.stock.naver.com/front-api/marketIndex/productList?category=worldCommodity&reutersCode=${codes}`,
-      { headers: { 'User-Agent': UA }, next: { revalidate: 300 } }
-    );
-    if (!res.ok) return await getCommodityPricesFallback();
-    const json = await res.json();
-    const items = json.result || [];
-    if (items.length === 0) return await getCommodityPricesFallback();
-
-    const nameMap = Object.fromEntries(COMMODITY_LIST.map((c) => [c.code, c]));
-    return items.map((item: any) => {
-      const def = nameMap[item.reutersCode] || { name: item.name, unit: '' };
-      return {
-        name: def.name,
-        price: parseNum(item.closePrice),
-        change: parseNum(item.compareToPreviousClosePrice),
-        changePercent: parseNum(item.fluctuationsRatio),
-        unit: def.unit,
-      };
-    });
-  } catch (e) {
-    console.error('getCommodityPrices error:', e);
-    return await getCommodityPricesFallback();
-  }
-}
-
-async function getCommodityPricesFallback(): Promise<CommodityPrice[]> {
   const results: CommodityPrice[] = [];
+
   await Promise.all(
-    COMMODITY_LIST.map(async ({ code, name, unit }) => {
-      try {
-        const res = await fetch(
-          `https://m.stock.naver.com/front-api/marketIndex/productDetail?reutersCode=${code}`,
-          { headers: { 'User-Agent': UA }, next: { revalidate: 300 } }
-        );
-        if (!res.ok) return;
-        const json = await res.json();
-        const d = json.result;
-        if (!d) return;
-        results.push({
-          name,
-          price: parseNum(d.closePrice),
-          change: parseNum(d.compareToPreviousClosePrice),
-          changePercent: parseNum(d.fluctuationsRatio),
-          unit,
-        });
-      } catch {
-        // skip
-      }
+    YAHOO_COMMODITIES.map(async ({ ticker, name, unit }) => {
+      const quote = await getYahooQuote(ticker);
+      if (!quote || quote.price === 0) return;
+      const change = quote.price - quote.prevClose;
+      const changePercent = quote.prevClose > 0 ? (change / quote.prevClose) * 100 : 0;
+      results.push({
+        name,
+        price: Math.round(quote.price * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        changePercent: Math.round(changePercent * 100) / 100,
+        unit,
+      });
     })
   );
-  return results;
+
+  // 원본 순서 유지
+  return YAHOO_COMMODITIES
+    .map((c) => results.find((r) => r.name === c.name))
+    .filter((r): r is CommodityPrice => r != null);
+}
+
+export async function getDollarIndex(): Promise<CommodityPrice | null> {
+  const quote = await getYahooQuote('DX-Y.NYB');
+  if (!quote || quote.price === 0) return null;
+  const change = quote.price - quote.prevClose;
+  const changePercent = quote.prevClose > 0 ? (change / quote.prevClose) * 100 : 0;
+  return {
+    name: '달러인덱스 (DXY)',
+    price: Math.round(quote.price * 100) / 100,
+    change: Math.round(change * 100) / 100,
+    changePercent: Math.round(changePercent * 100) / 100,
+    unit: '',
+  };
 }
 
 // ════════════════════════════════════════════
@@ -411,7 +368,6 @@ export async function getEcosByCategory(category: string): Promise<FredIndicator
     })
   );
 
-  // 원본 순서 유지
   const key = (s: EcosSeriesDef) => `${s.statCode}_${s.itemCode}`;
   return series
     .map((s) => results.find((r) => r.seriesId === key(s)))
@@ -419,7 +375,7 @@ export async function getEcosByCategory(category: string): Promise<FredIndicator
 }
 
 // ════════════════════════════════════════════
-// 카테고리별 통합 조회 함수
+// 카테고리별 통합 조회
 // ════════════════════════════════════════════
 
 export interface CategoryData {
