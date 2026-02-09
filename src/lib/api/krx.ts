@@ -186,7 +186,7 @@ export async function getMarketTopStocks(
   type: 'rise' | 'fall' = 'rise',
   count: number = 5
 ): Promise<{ symbol: string; name: string; price: number; change: number; changePercent: number }[]> {
-  const fetchSize = count + 15; // 파생상품 필터링 여유분
+  const fetchSize = count + 40; // 파생상품(ETN/ETF) 필터링 여유분
 
   // 순차 시도: 첫 성공 결과 사용 (원래 작동하던 패턴 유지)
   const urls = [
