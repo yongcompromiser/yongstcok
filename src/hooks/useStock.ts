@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { Stock, StockPrice, CandleData, CompanyDetail } from '@/types/stock';
 
 // 전체 종목 리스트 (KRX API → fallback: stockList.ts)
@@ -186,5 +186,24 @@ export function useCompanyDetail(symbol: string | null) {
     },
     enabled: !!symbol,
     staleTime: 5 * 60 * 1000, // 5분
+  });
+}
+
+// 상승/하락 TOP 무한 스크롤
+export function useTopStocksInfinite(type: 'rise' | 'fall') {
+  return useInfiniteQuery({
+    queryKey: ['topStocks', type],
+    queryFn: async ({ pageParam }: { pageParam: number }) => {
+      const res = await fetch(`/api/stock/market?type=${type}&page=${pageParam}`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json() as Promise<{
+        stocks: { symbol: string; name: string; price: number; change: number; changePercent: number }[];
+        page: number;
+        hasMore: boolean;
+      }>;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.page + 1 : undefined,
+    refetchInterval: 60000,
   });
 }

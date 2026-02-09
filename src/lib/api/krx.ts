@@ -180,19 +180,22 @@ function isDerivativeProduct(symbol: string, name: string): boolean {
   return false;
 }
 
+export type TopStock = { symbol: string; name: string; price: number; change: number; changePercent: number };
+
 // 시장 상승/하락 TOP (ETN/ETF 제외)
 export async function getMarketTopStocks(
   market: 'KOSPI' | 'KOSDAQ' = 'KOSPI',
   type: 'rise' | 'fall' = 'rise',
-  count: number = 5
-): Promise<{ symbol: string; name: string; price: number; change: number; changePercent: number }[]> {
+  count: number = 5,
+  page: number = 1
+): Promise<{ stocks: TopStock[]; hasMore: boolean }> {
   const fetchSize = count + 40; // 파생상품(ETN/ETF) 필터링 여유분
 
   // 순차 시도: 첫 성공 결과 사용 (원래 작동하던 패턴 유지)
   const urls = [
-    `${NAVER_API}/domestic/ranking/riseFall?sospiCategory=${market}&isRise=${type === 'rise'}&page=1&pageSize=${fetchSize}`,
-    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=${market}&page=1&pageSize=${fetchSize}`,
-    `${NAVER_API}/stocks/${type === 'rise' ? 'up' : 'down'}?page=1&pageSize=${fetchSize}`,
+    `${NAVER_API}/domestic/ranking/riseFall?sospiCategory=${market}&isRise=${type === 'rise'}&page=${page}&pageSize=${fetchSize}`,
+    `${NAVER_API}/domestic/ranking/${type}?sospiCategory=${market}&page=${page}&pageSize=${fetchSize}`,
+    `${NAVER_API}/stocks/${type === 'rise' ? 'up' : 'down'}?page=${page}&pageSize=${fetchSize}`,
   ];
 
   for (const url of urls) {
@@ -204,10 +207,10 @@ export async function getMarketTopStocks(
       if (!res.ok) continue;
 
       const data = await res.json();
-      const stocks = data.stocks || data.datas || data.result || data || [];
+      const rawStocks = data.stocks || data.datas || data.result || data || [];
 
-      if (Array.isArray(stocks) && stocks.length > 0) {
-        const mapped = stocks.map((item: any) => ({
+      if (Array.isArray(rawStocks) && rawStocks.length > 0) {
+        const mapped = rawStocks.map((item: any) => ({
           symbol: item.itemCode || item.cd || item.code || item.stockCode || '',
           name: item.stockName || item.nm || item.name || '',
           price: parseNum(item.closePrice || item.nv || item.price),
@@ -216,8 +219,10 @@ export async function getMarketTopStocks(
         }));
 
         // ETN/ETF 파생상품 제외
-        const filtered = mapped.filter((s: any) => !isDerivativeProduct(s.symbol, s.name));
-        return (filtered.length > 0 ? filtered : mapped).slice(0, count);
+        const filtered = mapped.filter((s: TopStock) => !isDerivativeProduct(s.symbol, s.name));
+        const result = filtered.length > 0 ? filtered : mapped;
+        const hasMore = rawStocks.length >= fetchSize;
+        return { stocks: result.slice(0, count), hasMore };
       }
     } catch {
       continue;
@@ -225,7 +230,7 @@ export async function getMarketTopStocks(
   }
 
   console.error('getMarketTopStocks: all endpoints failed');
-  return [];
+  return { stocks: [], hasMore: false };
 }
 
 // 시장 지수 (코스피, 코스닥)

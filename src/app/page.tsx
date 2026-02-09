@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp,
@@ -12,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMarketData } from '@/hooks/useStock';
+import { useMarketData, useTopStocksInfinite } from '@/hooks/useStock';
 
 function StockCard({
   symbol,
@@ -88,6 +89,86 @@ function IndexDisplay({
   );
 }
 
+function TopStocksSection({
+  type,
+  icon,
+  title,
+}: {
+  type: 'rise' | 'fall';
+  icon: React.ReactNode;
+  title: string;
+}) {
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useTopStocksInfinite(type);
+
+  const observerRef = useRef<HTMLDivElement>(null);
+
+  const handleObserver = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      const [entry] = entries;
+      if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetchingNextPage]
+  );
+
+  useEffect(() => {
+    const el = observerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(handleObserver, { threshold: 0.1 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [handleObserver]);
+
+  const allStocks = data?.pages.flatMap((page) => page.stocks) ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="max-h-[480px] overflow-y-auto px-6 pb-4 space-y-1">
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-14" />
+            ))
+          ) : allStocks.length > 0 ? (
+            <>
+              {allStocks.map((stock, idx) => (
+                <StockCard
+                  key={`${stock.symbol}-${idx}`}
+                  symbol={stock.symbol}
+                  name={stock.name}
+                  price={stock.price}
+                  changePercent={stock.changePercent}
+                />
+              ))}
+              {isFetchingNextPage && (
+                <div className="flex justify-center py-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              <div ref={observerRef} className="h-1" />
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm py-4 text-center">데이터 없음</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Home() {
   const { data: marketData, isLoading } = useMarketData();
 
@@ -160,65 +241,18 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      {/* 상승/하락 TOP */}
+      {/* 상승/하락 TOP (무한 스크롤) */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* 상승 TOP */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-red-500" />
-              상승 TOP
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-14" />
-              ))
-            ) : marketData?.topRise?.length > 0 ? (
-              marketData.topRise.map((stock: any) => (
-                <StockCard
-                  key={stock.symbol}
-                  symbol={stock.symbol}
-                  name={stock.name}
-                  price={stock.price}
-                  changePercent={stock.changePercent}
-                />
-              ))
-            ) : (
-              <p className="text-muted-foreground text-sm py-4 text-center">데이터 없음</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 하락 TOP */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-blue-500" />
-              하락 TOP
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-14" />
-              ))
-            ) : marketData?.topFall?.length > 0 ? (
-              marketData.topFall.map((stock: any) => (
-                <StockCard
-                  key={stock.symbol}
-                  symbol={stock.symbol}
-                  name={stock.name}
-                  price={stock.price}
-                  changePercent={stock.changePercent}
-                />
-              ))
-            ) : (
-              <p className="text-muted-foreground text-sm py-4 text-center">데이터 없음</p>
-            )}
-          </CardContent>
-        </Card>
+        <TopStocksSection
+          type="rise"
+          icon={<TrendingUp className="h-4 w-4 text-red-500" />}
+          title="상승 TOP"
+        />
+        <TopStocksSection
+          type="fall"
+          icon={<TrendingDown className="h-4 w-4 text-blue-500" />}
+          title="하락 TOP"
+        />
       </div>
     </div>
   );
