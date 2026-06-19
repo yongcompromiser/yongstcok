@@ -18,6 +18,7 @@ import {
   StickyNote,
   FileCheck,
   Newspaper,
+  Ship,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,7 @@ const economyNavItems: NavItem[] = [
   { title: '미국 경제', href: '/economy/us_economy', icon: BarChart3 },
   { title: '한국 경제', href: '/economy/korea', icon: Building },
   { title: '시장 동향', href: '/economy/market', icon: Activity },
+  { title: '호르무즈 통행량', href: '/economy/hormuz', icon: Ship },
 ];
 
 const infoNavItems: NavItem[] = [
