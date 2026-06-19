@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Loader2, RefreshCw, Info } from 'lucide-react';
+import { Loader2, RefreshCw, Info, Radio, Ship } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IndicatorCard } from '@/components/economy/IndicatorCard';
-import { MultiSeriesChart } from '@/components/economy/TimeSeriesChart';
+import { HormuzBarChart } from '@/components/economy/HormuzBarChart';
 import type { SeriesData } from '@/hooks/useEconomyChart';
-import { useHormuz } from '@/hooks/useChokepoint';
+import { useHormuz, useHormuzLive } from '@/hooks/useChokepoint';
 import type { ChokepointMetric, ChokepointPoint } from '@/lib/api/chokepoint';
+import { CATEGORY_LABEL, type VesselCategory } from '@/lib/api/aisStream';
 import type { Period } from '@/lib/api/economyHistory';
 import { cn } from '@/lib/utils';
 
@@ -45,8 +46,8 @@ const MAX_SELECTED = 5;
 // ── 페이지 ──
 
 export default function HormuzPage() {
-  const [period, setPeriod] = useState<Period>('1Y');
-  const [selectedKeys, setSelectedKeys] = useState<ChokepointMetric[]>(['n_total', 'n_tanker']);
+  const [period, setPeriod] = useState<Period>('3M');
+  const [selectedKeys, setSelectedKeys] = useState<ChokepointMetric[]>(['n_total']);
 
   const { data, isLoading, refetch, isFetching } = useHormuz(period);
 
@@ -61,7 +62,7 @@ export default function HormuzPage() {
     });
   }, []);
 
-  // 선택 지표 → MultiSeriesChart용 SeriesData[]
+  // 선택 지표 → 막대그래프용 SeriesData[]
   const series: SeriesData[] = useMemo(() => {
     if (!data) return [];
     return METRICS.filter((m) => selectedKeys.includes(m.key)).map((m) => ({
@@ -94,7 +95,11 @@ export default function HormuzPage() {
         </p>
       </div>
 
-      <div className="flex justify-end">
+      {/* 실시간 현황 (AISStream) */}
+      <LiveSection />
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-muted-foreground">통행량 추이 (IMF PortWatch)</h2>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
           {isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -158,7 +163,7 @@ export default function HormuzPage() {
             })}
           </div>
 
-          <MultiSeriesChart series={series} isLoading={isLoading} height={400} />
+          <HormuzBarChart series={series} isLoading={isLoading} height={400} />
         </CardContent>
       </Card>
 
@@ -199,5 +204,139 @@ export default function HormuzPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ── 실시간 현황 (AISStream) ──
+
+const CATEGORY_ORDER: VesselCategory[] = ['tanker', 'cargo', 'passenger', 'fishing', 'other'];
+const CATEGORY_COLOR: Record<VesselCategory, string> = {
+  tanker: '#ef4444',
+  cargo: '#16a34a',
+  passenger: '#3b82f6',
+  fishing: '#06b6d4',
+  other: '#9ca3af',
+};
+
+function formatAsOf(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function LiveSection() {
+  const { data, isLoading, isFetching, refetch } = useHormuzLive();
+
+  return (
+    <Card className="border-primary/30">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              {isFetching && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+              )}
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            </span>
+            실시간 통행 현황
+            <Radio className="h-4 w-4 text-muted-foreground" />
+          </CardTitle>
+          {data?.configured && (
+            <span className="text-xs text-muted-foreground">
+              {data.asOf ? `${formatAsOf(data.asOf)} 기준 · ${data.windowSec}초 수집` : ''}
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-40" />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-16" />
+              ))}
+            </div>
+          </div>
+        ) : !data?.configured ? (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-medium">실시간 AIS가 설정되지 않았습니다.</p>
+              <p>
+                aisstream.io에서 무료 API 키를 발급받아 환경변수{' '}
+                <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40">AISSTREAM_API_KEY</code>
+                {' '}에 설정하면 호르무즈 해협의 실시간 선박 현황이 표시됩니다.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* 총 선박 수 */}
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">현재 해협 내 선박</p>
+                <p className="text-4xl font-bold tabular-nums flex items-baseline gap-1.5">
+                  <Ship className="h-6 w-6 text-primary self-center" />
+                  {data.total}
+                  <span className="text-base font-normal text-muted-foreground">척</span>
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                {isFetching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {/* 유형별 분류 */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {CATEGORY_ORDER.map((cat) => (
+                <div key={cat} className="rounded-lg border p-3">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: CATEGORY_COLOR[cat] }}
+                    />
+                    <span className="text-xs text-muted-foreground">{CATEGORY_LABEL[cat]}</span>
+                  </div>
+                  <p className="text-xl font-semibold tabular-nums mt-1">{data.byCategory[cat]}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* 선박 목록 */}
+            {data.vessels.length > 0 && (
+              <div className="rounded-lg border divide-y max-h-64 overflow-y-auto">
+                {data.vessels.map((v) => (
+                  <div key={v.mmsi} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: CATEGORY_COLOR[v.category] }}
+                      />
+                      <span className="truncate font-medium">{v.name}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        {CATEGORY_LABEL[v.category]}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
+                      {v.sog.toFixed(1)} kn
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              AISStream 실시간 AIS · 30초마다 자동 갱신. AIS 미장착(소형선·군함)·신호 소실(다크 선박)·GPS
+              재밍 선박은 집계되지 않을 수 있습니다.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
