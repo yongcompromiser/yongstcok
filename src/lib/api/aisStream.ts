@@ -4,8 +4,9 @@ import WebSocket from 'ws';
 // Vercel(서버리스)에서는 상시 스트림이 불가 → 짧게 접속해 현재 선박 스냅샷만 수집
 const AISSTREAM_URL = 'wss://stream.aisstream.io/v0/stream';
 
-// 호르무즈 해협 bounding box [[[lat, lon], [lat, lon]]] (좌표 순서는 무관)
-const HORMUZ_BBOX = [[[25.5, 55.5], [27.0, 57.3]]];
+// 호르무즈 해협 광역 bounding box [[[lat, lon], [lat, lon]]] (좌표 순서는 무관)
+// 페르시아만 출구 ~ 오만만 접근로까지 포함해 통항 선박을 최대한 포착
+const HORMUZ_BBOX = [[[24.5, 54.5], [27.5, 58.0]]];
 
 export type VesselCategory = 'tanker' | 'cargo' | 'passenger' | 'fishing' | 'other';
 

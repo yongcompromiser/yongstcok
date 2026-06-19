@@ -8,8 +8,8 @@ export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  // 수집 시간 (ms), 기본 8초, 3~20초로 제한
-  const rawWindow = parseInt(sp.get('window') || '8000', 10);
+  // 수집 시간 (ms), 기본 10초, 3~20초로 제한
+  const rawWindow = parseInt(sp.get('window') || '10000', 10);
   const windowMs = Math.min(Math.max(isNaN(rawWindow) ? 8000 : rawWindow, 3000), 20000);
 
   try {

@@ -291,6 +291,18 @@ function LiveSection() {
               </Button>
             </div>
 
+            {/* 신호 없음(블랙아웃) 안내 */}
+            {data.total === 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+                <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <p>
+                  현재 해협 영역에서 추적 가능한 AIS 신호가 잡히지 않습니다. 선박이 운항하지 않는다는 뜻이
+                  아니라, 광범위한 GPS 재밍·AIS 신호 소실(다크 선박)로 추정됩니다. 이 상태 자체가 해당
+                  지역의 긴장도를 나타내는 신호일 수 있습니다.
+                </p>
+              </div>
+            )}
+
             {/* 유형별 분류 */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               {CATEGORY_ORDER.map((cat) => (
