@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Loader2, RefreshCw, Info, Radio, Ship } from 'lucide-react';
+import { Loader2, RefreshCw, Info, Radio, Ship, Database } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IndicatorCard } from '@/components/economy/IndicatorCard';
 import { HormuzBarChart } from '@/components/economy/HormuzBarChart';
 import type { SeriesData } from '@/hooks/useEconomyChart';
-import { useHormuz, useHormuzLive } from '@/hooks/useChokepoint';
+import { useHormuz, useHormuzLive, useHormuzSelf } from '@/hooks/useChokepoint';
+import type { SelfDailyPoint } from '@/hooks/useChokepoint';
 import type { ChokepointMetric, ChokepointPoint } from '@/lib/api/chokepoint';
 import { CATEGORY_LABEL, type VesselCategory } from '@/lib/api/aisStream';
 import type { Period } from '@/lib/api/economyHistory';
@@ -97,6 +98,9 @@ export default function HormuzPage() {
 
       {/* 실시간 현황 (AISStream) */}
       <LiveSection />
+
+      {/* 자체 집계 (AIS 누적) */}
+      <SelfSection />
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-muted-foreground">통행량 추이 (IMF PortWatch)</h2>
@@ -347,6 +351,151 @@ function LiveSection() {
               재밍 선박은 집계되지 않을 수 있습니다.
             </p>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── 자체 집계 (AIS 누적) ──
+
+interface SelfMetricDef {
+  key: keyof Omit<SelfDailyPoint, 'date'>;
+  label: string;
+  color: string;
+}
+
+const SELF_METRICS: SelfMetricDef[] = [
+  { key: 'n_total', label: '총 선박', color: '#3b82f6' },
+  { key: 'n_tanker', label: '유조선', color: '#ef4444' },
+  { key: 'n_cargo', label: '화물선', color: '#16a34a' },
+  { key: 'n_passenger', label: '여객선', color: '#a855f7' },
+  { key: 'n_other', label: '기타', color: '#9ca3af' },
+];
+
+const SELF_PERIODS: Period[] = ['1M', '3M', '6M', '1Y'];
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function SelfSection() {
+  const [period, setPeriod] = useState<Period>('3M');
+  const [selectedKeys, setSelectedKeys] = useState<SelfMetricDef['key'][]>(['n_total']);
+  const { data: res, isLoading } = useHormuzSelf(period);
+
+  const daily = useMemo(() => res?.data ?? [], [res]);
+  const meta = res?.meta;
+
+  const toggleKey = useCallback((key: SelfMetricDef['key']) => {
+    setSelectedKeys((prev) => {
+      if (prev.includes(key)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((k) => k !== key);
+      }
+      if (prev.length >= 4) return prev;
+      return [...prev, key];
+    });
+  }, []);
+
+  const series: SeriesData[] = useMemo(() => {
+    return SELF_METRICS.filter((m) => selectedKeys.includes(m.key)).map((m) => ({
+      key: m.key,
+      label: m.label,
+      color: m.color,
+      unit: '척',
+      data: daily.map((p) => ({ date: p.date, value: p[m.key] })),
+    }));
+  }, [daily, selectedKeys]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            자체 집계 (실시간 AIS 누적)
+          </CardTitle>
+          <div className="flex gap-1">
+            {SELF_PERIODS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  'px-2.5 py-1 text-xs font-medium rounded-md transition-colors',
+                  period === p
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {meta && !meta.configured ? (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <p>
+              자체 집계 DB가 설정되지 않았습니다. Supabase에 <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40">hormuz_ais.sql</code>{' '}
+              실행 + <code className="px-1 rounded bg-amber-100 dark:bg-amber-900/40">SUPABASE_SERVICE_ROLE_KEY</code> 설정이 필요합니다.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* 수집 현황 */}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                매시간 자동 수집
+              </span>
+              {meta?.lastRunAt && <span>마지막 수집: {formatDateTime(meta.lastRunAt)}</span>}
+              {meta?.runsToday != null && <span>오늘 {meta.runsToday}회 수집</span>}
+              {meta?.lastFound != null && <span>최근 발견 {meta.lastFound}척</span>}
+            </div>
+
+            {/* 지표 칩 */}
+            <div className="flex gap-1.5 flex-wrap">
+              {SELF_METRICS.map((m) => {
+                const isSelected = selectedKeys.includes(m.key);
+                return (
+                  <button
+                    key={m.key}
+                    onClick={() => toggleKey(m.key)}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap border transition-colors inline-flex items-center gap-1.5',
+                      isSelected
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    {isSelected && (
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: m.color }} />
+                    )}
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {daily.length === 0 && !isLoading ? (
+              <div className="flex items-center justify-center text-sm text-muted-foreground border rounded-lg" style={{ height: 300 }}>
+                아직 누적된 데이터가 없습니다. 수집이 쌓이면 표시됩니다.
+              </div>
+            ) : (
+              <HormuzBarChart series={series} isLoading={isLoading} height={300} />
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              PortWatch 공식치와 별개로, 우리가 직접 AIS를 수집해 만든 일별 추정치입니다. 무료 AIS 샘플링·신호
+              소실로 실제보다 과소집계될 수 있어 추세 참고용입니다.
+            </p>
+          </>
         )}
       </CardContent>
     </Card>

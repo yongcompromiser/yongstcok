@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/chokepoint/collect",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

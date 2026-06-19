@@ -21,6 +21,36 @@ export function useHormuz(period: string) {
   });
 }
 
+// 자체 집계 일별 데이터 (Supabase 누적)
+export interface SelfDailyPoint {
+  date: string;
+  n_total: number;
+  n_tanker: number;
+  n_cargo: number;
+  n_passenger: number;
+  n_fishing: number;
+  n_other: number;
+}
+
+export interface SelfMeta {
+  configured: boolean;
+  lastRunAt?: string | null;
+  lastFound?: number | null;
+  runsToday?: number;
+}
+
+export function useHormuzSelf(period: string) {
+  return useQuery<{ data: SelfDailyPoint[]; meta: SelfMeta }>({
+    queryKey: ['chokepoint', 'hormuz', 'self', period],
+    queryFn: async () => {
+      const res = await fetch(`/api/chokepoint/self?period=${period}`);
+      if (!res.ok) return { data: [], meta: { configured: false } };
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5분
+  });
+}
+
 // 실시간 AIS 스냅샷 (AISStream) — 30초마다 자동 갱신
 export function useHormuzLive() {
   return useQuery<LiveSnapshot>({
