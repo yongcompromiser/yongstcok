@@ -1,17 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import WebSocket from 'ws';
 
 // 임시 진단용 라우트. AISStream 연결/구독/수신 상태를 그대로 노출한다.
-// 원인 파악 후 제거 예정.
+// 원인 파악 후 제거 예정.  ?mode=world 로 전 세계 박스 테스트 가능.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 const HORMUZ_BBOX = [[[24.5, 54.5], [27.5, 58.0]]];
+const WORLD_BBOX = [[[-90, -180], [90, 180]]];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const apiKey = process.env.AISSTREAM_API_KEY;
   if (!apiKey) return NextResponse.json({ configured: false });
+
+  const mode = request.nextUrl.searchParams.get('mode');
+  const bbox = mode === 'world' ? WORLD_BBOX : HORMUZ_BBOX;
 
   const diag: {
     opened: boolean;
@@ -61,7 +65,7 @@ export async function GET() {
       ws?.send(
         JSON.stringify({
           APIKey: apiKey,
-          BoundingBoxes: HORMUZ_BBOX,
+          BoundingBoxes: bbox,
           FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
         })
       );
