@@ -1,27 +1,36 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import {
+  KAKAO_REST_API_KEY,
+  KAKAO_CALLBACK_PATH,
+  KAKAO_SCOPE,
+} from '@/lib/kakao';
 
-// 카카오 OAuth 로그인 버튼. Supabase 내장 'kakao' provider 사용.
-// 클릭 → 카카오 동의 → Supabase 콜백 → /auth/callback 에서 세션 교환.
+// 커스텀 카카오 OAuth 로그인 버튼.
+// Supabase 네이티브 provider는 account_email scope를 강제로 붙여 KOE205가 나므로,
+// 카카오 인가 요청을 직접 만들어 닉네임만 요청한다. 콜백(/auth/kakao/callback)에서
+// 토큰 교환 + Supabase 세션 발급을 처리한다.
 export function KakaoLoginButton() {
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleKakaoLogin = async () => {
+  const handleKakaoLogin = () => {
     setIsLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'kakao',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        // 카카오 앱에 활성화된 동의항목만 요청한다. (이메일/프로필사진은 권한 없음 →
-        // 요청 시 KOE205 에러가 나므로 닉네임만 요청)
-        scopes: 'profile_nickname',
-      },
+
+    // CSRF 방지용 state (콜백에서 쿠키와 대조)
+    const state = crypto.randomUUID();
+    document.cookie = `kakao_oauth_state=${state}; path=/; max-age=600; samesite=lax`;
+
+    const redirectUri = `${window.location.origin}${KAKAO_CALLBACK_PATH}`;
+    const params = new URLSearchParams({
+      client_id: KAKAO_REST_API_KEY,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: KAKAO_SCOPE,
+      state,
     });
-    // 성공 시 카카오로 리다이렉트되므로 이 아래는 보통 실행되지 않음
-    if (error) setIsLoading(false);
+
+    window.location.href = `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;
   };
 
   return (
@@ -31,7 +40,6 @@ export function KakaoLoginButton() {
       disabled={isLoading}
       className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-[#FEE500] px-4 text-sm font-medium text-[#191600] transition-opacity hover:opacity-90 disabled:opacity-60"
     >
-      {/* 카카오 말풍선 아이콘 */}
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
           fill="#191600"
