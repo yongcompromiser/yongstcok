@@ -16,13 +16,25 @@ export async function GET(request: NextRequest) {
   const apiKey = process.env.AISSTREAM_API_KEY;
   if (!apiKey) return NextResponse.json({ configured: false });
 
-  const mode = request.nextUrl.searchParams.get('mode');
-  const bbox =
-    mode === 'world'
-      ? WORLD_BBOX
-      : mode === 'hormuz2'
-      ? HORMUZ_BBOX_FIXED
-      : HORMUZ_BBOX;
+  const sp = request.nextUrl.searchParams;
+  const mode = sp.get('mode');
+
+  // 임의 박스: ?n=&s=&e=&w= (북/남/동/서). AISStream 순서 [[N,W],[S,E]].
+  const n = sp.get('n');
+  const s = sp.get('s');
+  const e = sp.get('e');
+  const w = sp.get('w');
+
+  let bbox: number[][][];
+  if (n && s && e && w) {
+    bbox = [[[Number(n), Number(w)], [Number(s), Number(e)]]];
+  } else if (mode === 'world') {
+    bbox = WORLD_BBOX;
+  } else if (mode === 'hormuz2') {
+    bbox = HORMUZ_BBOX_FIXED;
+  } else {
+    bbox = HORMUZ_BBOX;
+  }
 
   const diag: {
     opened: boolean;
