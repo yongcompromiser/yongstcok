@@ -26,6 +26,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useStockSearch } from '@/hooks/useStock';
+import { MobileNav } from '@/components/layout/MobileNav';
 
 export function Header() {
   const router = useRouter();
@@ -66,6 +67,9 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4 gap-4">
+        {/* 모바일 햄버거 메뉴 (lg 미만에서만 표시) */}
+        <MobileNav />
+
         {/* 로고 */}
         <Link href="/" className="flex items-center gap-2 font-bold text-lg shrink-0">
           <span className="text-primary">주뇽좌의</span>
