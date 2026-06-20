@@ -89,8 +89,9 @@ export default function HormuzPage() {
       <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
         <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
         <p>
-          위성 AIS 기반 추정치이며 매주 화요일 갱신됩니다(보통 1~2일 지연). 최근 며칠은 갱신 지연 또는 해당
-          지역 GPS 재밍·AIS 신호 소실로 값이 낮거나 0으로 표시될 수 있습니다.
+          위성 AIS 기반 추정치입니다. 집계·검증에 시간이 걸려 <strong>최신 데이터가 보통 며칠~최대 1주
+          지연</strong>됩니다(현재 표시되는 마지막 날짜 기준). 또 최근 호르무즈 일대의 GPS 재밍·AIS 신호
+          소실(다크 선박)로 값이 실제보다 낮거나 0으로 나올 수 있습니다.
         </p>
       </div>
 
