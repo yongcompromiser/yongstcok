@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { QueryProvider } from '@/components/providers/QueryProvider';
+import { AuthProvider } from '@/components/providers/AuthProvider';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { RightPanel } from '@/components/layout/RightPanel';
@@ -26,6 +27,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
+            <AuthProvider>
             <div className="min-h-screen flex flex-col">
               <Header />
               <div className="flex-1 flex">
@@ -34,6 +36,7 @@ export default function RootLayout({
                 <RightPanel />
               </div>
             </div>
+            </AuthProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

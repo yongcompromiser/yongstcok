@@ -27,6 +27,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useStockSearch } from '@/hooks/useStock';
 import { MobileNav } from '@/components/layout/MobileNav';
+import { createClient } from '@/lib/supabase/client';
 
 export function Header() {
   const router = useRouter();
@@ -62,6 +63,13 @@ export function Header() {
     setQuery('');
     setIsOpen(false);
     router.push(`/company/${symbol}`);
+  };
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/');
+    router.refresh();
   };
 
   return (
@@ -196,7 +204,10 @@ export function Header() {
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={handleLogout}
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 로그아웃
               </DropdownMenuItem>

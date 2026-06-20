@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/client';
+import { KakaoLoginButton } from '@/components/auth/KakaoLoginButton';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -103,6 +104,16 @@ export default function LoginPage() {
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
           </form>
+
+          {/* 구분선 */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">또는</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* 소셜 로그인 */}
+          <KakaoLoginButton />
 
           <p className="text-center text-sm text-muted-foreground">
             계정이 없으신가요?{' '}
