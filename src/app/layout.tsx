@@ -3,6 +3,7 @@ import './globals.css';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { AuthProvider } from '@/components/providers/AuthProvider';
+import { PageViewTracker } from '@/components/analytics/PageViewTracker';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { RightPanel } from '@/components/layout/RightPanel';
@@ -28,6 +29,7 @@ export default function RootLayout({
         >
           <QueryProvider>
             <AuthProvider>
+            <PageViewTracker />
             <div className="min-h-screen flex flex-col">
               <Header />
               <div className="flex-1 flex">
