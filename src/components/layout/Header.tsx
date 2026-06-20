@@ -197,7 +197,7 @@ export function Header() {
               </DropdownMenuItem>
               {isAdmin() && (
                 <DropdownMenuItem asChild>
-                  <Link href="/admin/reports">
+                  <Link href="/admin">
                     <Settings className="mr-2 h-4 w-4" />
                     관리자
                   </Link>
