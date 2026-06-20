@@ -8,6 +8,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 const HORMUZ_BBOX = [[[24.5, 54.5], [27.5, 58.0]]];
+// 위도를 높은 값(북) 먼저 = [[NW], [SE]] 순서로 교정한 박스
+const HORMUZ_BBOX_FIXED = [[[27.5, 54.5], [24.5, 58.0]]];
 const WORLD_BBOX = [[[-90, -180], [90, 180]]];
 
 export async function GET(request: NextRequest) {
@@ -15,7 +17,12 @@ export async function GET(request: NextRequest) {
   if (!apiKey) return NextResponse.json({ configured: false });
 
   const mode = request.nextUrl.searchParams.get('mode');
-  const bbox = mode === 'world' ? WORLD_BBOX : HORMUZ_BBOX;
+  const bbox =
+    mode === 'world'
+      ? WORLD_BBOX
+      : mode === 'hormuz2'
+      ? HORMUZ_BBOX_FIXED
+      : HORMUZ_BBOX;
 
   const diag: {
     opened: boolean;
