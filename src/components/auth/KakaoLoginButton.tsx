@@ -15,6 +15,9 @@ export function KakaoLoginButton() {
       provider: 'kakao',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        // 카카오 앱에 활성화된 동의항목만 요청한다. (이메일/프로필사진은 권한 없음 →
+        // 요청 시 KOE205 에러가 나므로 닉네임만 요청)
+        scopes: 'profile_nickname',
       },
     });
     // 성공 시 카카오로 리다이렉트되므로 이 아래는 보통 실행되지 않음
