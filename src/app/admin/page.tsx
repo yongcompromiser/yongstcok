@@ -87,15 +87,7 @@ export default async function AdminPage() {
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 20);
 
-  // 데이터 수집 현황 (호르무즈 AIS)
   const today = new Date().toISOString().slice(0, 10);
-  const [{ count: runsTotal }, { count: runsToday }, lastRunRes, dailyRes] = await Promise.all([
-    admin.from('hormuz_ais_runs').select('id', { count: 'exact', head: true }),
-    admin.from('hormuz_ais_runs').select('id', { count: 'exact', head: true }).eq('date', today),
-    admin.from('hormuz_ais_runs').select('ran_at, vessels_found').order('ran_at', { ascending: false }).limit(1),
-    admin.from('hormuz_ais_daily').select('date, n_total').order('date', { ascending: false }).limit(7),
-  ]);
-  const lastRun = lastRunRes.data?.[0];
 
   // ── 방문/트래픽 (page_views) — 테이블이 아직 없으면 graceful 처리 ──
   const traffic = {
@@ -174,33 +166,6 @@ export default async function AdminPage() {
           <StatCard label="최근 7일 가입" value={signups7d} />
           <StatCard label="최근 30일 가입" value={signups30d} />
           <StatCard label="최근 7일 로그인" value={active7d} sub="활동 사용자" />
-        </div>
-      </section>
-
-      {/* 데이터 수집 현황 */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          데이터 수집 (호르무즈 AIS)
-        </h2>
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <StatCard label="총 수집 실행" value={runsTotal ?? 0} />
-          <StatCard label="오늘 실행" value={runsToday ?? 0} />
-          <StatCard
-            label="마지막 실행"
-            value={lastRun ? `${lastRun.vessels_found}척` : '—'}
-            sub={lastRun ? fmt(lastRun.ran_at) : '기록 없음'}
-          />
-          <StatCard
-            label="최근 일별 평균"
-            value={
-              dailyRes.data && dailyRes.data.length > 0
-                ? Math.round(
-                    dailyRes.data.reduce((s, d) => s + (d.n_total ?? 0), 0) / dailyRes.data.length
-                  )
-                : 0
-            }
-            sub="최근 7일 n_total"
-          />
         </div>
       </section>
 

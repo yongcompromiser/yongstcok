@@ -1,0 +1,27 @@
+name: Supabase Keep-Alive
+
+# Supabase 무료 플랜은 약 7일간 활동이 없으면 프로젝트를 자동 일시정지한다.
+# 매일 한 번 keepalive 엔드포인트를 호출해 DB에 가벼운 쿼리를 발생시켜 방지한다.
+# (/api/keepalive 가 Vercel의 서비스 롤로 DB를 조회 → 외부 시크릿 불필요)
+
+on:
+  schedule:
+    - cron: "30 6 * * *" # 매일 06:30 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping keepalive endpoint
+        run: |
+          status=$(curl -s -o /tmp/body.txt -w "%{http_code}" --max-time 30 \
+            "https://yongstcok.vercel.app/api/keepalive")
+          echo "HTTP $status"
+          echo "Response: $(cat /tmp/body.txt)"
+          if [ "$status" = "200" ]; then
+            echo "✅ keep-alive 성공"
+          else
+            echo "::error::keep-alive 실패 (HTTP $status)"
+            exit 1
+          fi
